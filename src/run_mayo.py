@@ -50,17 +50,6 @@ def load_data(data_split_root):
     train_path = f'{data_split_root}/train.csv'
     test_path = f'{data_split_root}/test.csv'
     
-    '''
-    doesn't work bc gcs
-    try:
-        assert os.path.exists(train_path)
-    except:
-        raise ValueError(f'Expected a train.csv file to exist in {data_split_root} but none exists')
-    try:
-        assert os.path.exists(test_path)
-    except:
-        raise ValueError(f'Expected a test.csv file to exist in {data_split_root} but none exists')
-    '''
     # (1) load the train and test files to a df (requires a 'uid' column)
     train_df = pd.read_csv(train_path, index_col = 'uid')
     test_df = pd.read_csv(test_path, index_col = 'uid')

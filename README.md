@@ -19,6 +19,7 @@ If running on your local machine and not in a GCP environement, you will also ne
 * google-cloud-bigquery 
 
 If data is stored in GCS, additionally, run 
+
 ```gcloud auth application-default login```
 
 ```gcloud auth application-defaul set-quota-project PROJECT_NAME```
