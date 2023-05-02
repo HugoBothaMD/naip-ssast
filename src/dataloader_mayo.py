@@ -212,6 +212,7 @@ class AudioDataset(Dataset):
             norm = Normalize(self.norm_mean, self.norm_std)
             transform_list.append(norm)
         if self.noise:
+            #TODO:
             noise = Noise()
             transform_list.append(noise)
         transform = transforms.Compose(transform_list)

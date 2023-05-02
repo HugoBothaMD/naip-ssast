@@ -156,12 +156,12 @@ def run(args, target_labels, bucket):
     train_audio_conf = {'dataset': args.dataset, 'mode': 'train', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
                     'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
                     'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
-                    'mean':args.dataset_mean, 'std':args.dataset_std}
+                    'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
 
     eval_audio_conf = {'dataset': args.dataset, 'mode': 'evaluation', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
                     'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
                     'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
-                    'mean':args.dataset_mean, 'std':args.dataset_std}
+                    'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
     
     #(3) Generate audio dataset, note that if bucket not given, it assumes None and loads from local files
     train_dataset = AudioDataset(annotations_df=train_df, target_labels=target_labels, audio_conf=train_audio_conf, 
@@ -178,17 +178,19 @@ def run(args, target_labels, bucket):
 
     #(5) set up model based on specified task
     if 'pretrain' in args.task:
-        cluster = (args.num_mel_bins != args.fshape)
-        if cluster == True:
-            print('The num_mel_bins {:d} and fshape {:d} are different, not masking a typical time frame, using cluster masking.'.format(args.num_mel_bins, args.fshape))
-        else:
-            print('The num_mel_bins {:d} and fshape {:d} are same, masking a typical time frame, not using cluster masking.'.format(args.num_mel_bins, args.fshape))
-        #PRETRAIN
-        # no label dimension needed as it is self-supervised, fshape=fstride and tshape=tstride
-        ast_mdl = ASTModel_pretrain(fshape=args.fshape, tshape=args.tshape,
-                                    fstride=args.fshape, tstride=args.tshape,
-                                    input_fdim=args.num_mel_bins, input_tdim=args.target_length,
-                                    model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path)
+        print('Pretraining not supported.')
+        return None
+        # cluster = (args.num_mel_bins != args.fshape)
+        # if cluster == True:
+        #     print('The num_mel_bins {:d} and fshape {:d} are different, not masking a typical time frame, using cluster masking.'.format(args.num_mel_bins, args.fshape))
+        # else:
+        #     print('The num_mel_bins {:d} and fshape {:d} are same, masking a typical time frame, not using cluster masking.'.format(args.num_mel_bins, args.fshape))
+        # #PRETRAIN
+        # # no label dimension needed as it is self-supervised, fshape=fstride and tshape=tstride
+        # ast_mdl = ASTModel_pretrain(fshape=args.fshape, tshape=args.tshape,
+        #                             fstride=args.fshape, tstride=args.tshape,
+        #                             input_fdim=args.num_mel_bins, input_tdim=args.target_length,
+        #                             model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path)
     else:
         ast_mdl = ASTModel_finetune(task=args.task, label_dim=args.n_class, 
                                     fshape=args.fshape, tshape=args.tshape, 
@@ -271,8 +273,9 @@ def main():
     parser.add_argument('--timem', help='time mask max length', type=int, default=0)
     parser.add_argument("--mixup", type=float, default=0, help="how many (0-1) samples need to be mixup during training")
     parser.add_argument("--noise", type=bool, default=False, help="specify if augment noise in finetuning")
+    parser.add_argument("--skip_norm", type=bool, default=False, help="specify whether to skip normalization on spectrogram")
     #Model parameters
-    parser.add_argument("--task", type=str, default='pretrain_mpc', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
+    parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
     parser.add_argument("--fstride", type=int, default=128,help="soft split freq stride, overlap=patch_size-stride")
     parser.add_argument("--tstride", type=int, default=2, help="soft split time stride, overlap=patch_size-stride")
     parser.add_argument("--fshape", type=int, default=128,help="shape of patch on the frequency dimension")
@@ -308,7 +311,7 @@ def main():
     parser.add_argument("--epoch_iter", type=int, default=2000, help="for pretraining, how many iterations to verify and save models")
     #evaluation
     parser.add_argument('--eval_only', type=bool, default=False, help="specify if you want to only run evaluation - use pretrained_mdl_path to specify which model to load for evaluation")
-    parser.add_argument("-mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/experiments/models/audio_model.1.pth', help="if loading an already pre-trained/fine-tuned model")
+    parser.add_argument("--mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/experiments/models/audio_model.1.pth', help="if loading an already pre-trained/fine-tuned model")
     args = parser.parse_args()
 
     if args.bucket_name is not None:
