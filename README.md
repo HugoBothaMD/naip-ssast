@@ -1,10 +1,10 @@
 # SSAST for Mayo Data
 This is an implementation of the SSAST: Self-supervised audio spectrogram transformer, which is publicly available at
-/[SSAST github](https://github.com/YuanGongND/ssast). The base model architecture is the same, and original models
+[SSAST github](https://github.com/YuanGongND/ssast). The base model architecture is the same, and original models
 can be downloaded from the github to use for finetuning.
 
 ## Running requirements
-When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model]{https://github.com/YuanGongND/ssast#pretrained-models} section
+When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models) section
 of the original SSAST github. The code is compatible with other model types, but has not been tested with them.
 
 The environment must include the following packages, all of which can be downloaded with pip:
