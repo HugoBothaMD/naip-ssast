@@ -22,8 +22,6 @@ import argparse
 import ast
 import os
 import pickle
-import sys
-import time
 
 #third party
 import numpy as np
@@ -39,6 +37,7 @@ from dataloader_mayo import AudioDataset
 from models import ASTModel_pretrain, ASTModel_finetune
 from traintest_mayo import *
 from traintest_mask_mayo import *
+from utilities.dataloader_utils import collate_fn
 
 
 def load_data(data_split_root):
@@ -59,18 +58,6 @@ def load_data(data_split_root):
     test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
 
     return train_df, test_df
-
-def load_model(model_path, audio_model):
-    '''
-    If you're loading a specific file later on and want to skip finetuning/pretraining to just run evaluation
-    '''
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    sd = torch.load(model_path, map_location=device)
-    if not isinstance(audio_model, torch.nn.DataParallel):
-        audio_model = torch.nn.DataParallel(audio_model)
-    audio_model.load_state_dict(sd, strict=False)
-
-    return audio_model
 
 def basic_finetune(args, ast_mdl, train_loader):
     '''
@@ -138,6 +125,11 @@ def basic_metrics(preds, targets, target_labels, args):
     return data
 
 def run(args, target_labels, bucket):
+    '''
+    Run fine-tuning/pre-training
+
+    Takes in arg parser arg list, list of target labels, and a GCS bucket
+    '''
     #(1) Load data, note that we are not doing any validation
     train_df, test_df = load_data(args.data_split_root)
 
@@ -219,7 +211,9 @@ def run(args, target_labels, bucket):
             else:
                 ast_mdl = train(args=args, audio_model=ast_mdl, train_loader=train_loader, val_loader=None)
     else:
-       ast_mdl = load_model(args.mdl_path, ast_mdl)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        sd = torch.load(args.mdl_path, map_location=device)
+        ast_mdl.load_state_dict(sd, strict=False)
     
     #(8) evaluation:
     if args.basic:

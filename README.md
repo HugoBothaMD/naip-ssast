@@ -3,6 +3,14 @@ This is an implementation of the SSAST: Self-supervised audio spectrogram transf
 [SSAST github](https://github.com/YuanGongND/ssast). The base model architecture is the same, and original models
 can be downloaded from the github to use for finetuning.
 
+## Known errors
+Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
+1. The pretraining forward loop is not functional - it is expecting input to be a different size than it is and it is unclear why.
+2. If you pass any value above 0 for `num_workers`, you will get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
+3. Mixup is not yet supported, weighted averaging hasn't been debugged.
+4. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
+5. The current basic fine-tuning loop does NOT set the learning rate for the optimizer, and instead uses the default AdamW optimizer. Future update will make this flexible. Additionally, only one optimizer and loss function is currently available (binary cross entropy loss, Adam/AdamW optimizer). We may add more options in the future. 
+
 ## Running requirements
 When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models) section
 of the original SSAST github. The code is compatible with other model types, but has not been tested with them.
@@ -68,6 +76,10 @@ Outside of the regular audio configurations, you can also set a boolean value fo
 One other difference between the original implementation and ours is that we attempted to remove all branching logic in the model initialization so as to make it possible to visualize attention. As such,
 we split the orignal `ASTModel class` into `ASTModel_pretrain` and `ASTModel_finetune`. As of now, only the `ASTModel_finetune` class is available. Please see [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py) for specifics on what arguments it takes and what the default values are. 
 
+Please note the following conditions of the model classes:
+1. The pretraining forward loop is non-functional, but the class is necessary for building the structure for loading in a pre-trained model before fine-tuning. There is a input size mismatch in this forward loop that seems to stem from the original code and the fix has not been found.
+2. When loading in a pre-trained model in the `ASTModel_finetune` class, you must pass it only a pre-trained model such as those downloadable from [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models). If you are trying to load a finetuned model for only evaluating, the class will throw errors as relevant information is missing or stored differently in the saved fine-tuned models. To load these models, you must instead load one of the pre-trained only models, then include an additional load statement ```ast_mdl.load_state_dict(torch.load(finetuned_mdl_path))``` which will load in the proper values for evaluation. 
+
 ### run_mayo.py 
 The command line usable, start-to-finish implementation of SSAST is available with [run_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.py). There is also a notebook implementation: [run_mayo.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.ipynb). This implementation completes fine-tuning and evaluation of a fine-tuned model. It DOES NOT return embeddings. Please see [get_embeddings.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.py) for this functionality. 
 
@@ -102,7 +114,21 @@ Notes:
 We slightly altered the original train/validation functions for fine-tuning. The new version is available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py)
 
 ## Embeddings
-Take in a fine-tuned model and get embeddings from the model for an audio file.
+To take in a fine-tuned model and get embeddings from the model for dataset, use [get_embeddings.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.py) or the notebook version [get_embeddings.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.ipynb).
+
+This code will output a dataframe of UID and 768 dim embeddings, and save it to a csv. The following arguments must be specified:
+
+* `-d`: sets the `data_csv` variable, which contains a full file path to the csv to load and get embeddings for. 
+* `-i`: sets the `prefix` or input directory containing the audio files to load. Compatible with both local and GCS bucket directories containing audio files, though do not include 'gs://'
+* `-l`: sets the `label_txt` path. This is a full file path to a .txt file contain a list of the target labels for selection (see [labels.txt](https://github.com/dwiepert/mayo-ssast/blob/main/src/labels.txt))
+* `-b`: sets the `bucket_name` for GCS loading. Required if loading from cloud.
+* `-p`: sets the `project_name` for GCS loading. Required if loading from cloud. 
+* `--lib`: specifies whether to load using librosa (True) or torchaudio (False)
+* `-o`: specifies the `exp_dir` where all the save data from fine-tuning a model is stored. Expects that there will be an `args.pkl` file with all the arguments used when fine-tuning, along with saved models. The model to load is specified in a different variable.
+* `-mn`: specifies the `model_name`, this is the basename of a model you want to load that is located in the `exp_dir`.
+* `--batch_size`: set the batch size (default 32)
+* `--num_workers`: set number of workers for dataloader (default 0)
+
 
 ## Visualize Attention
 
