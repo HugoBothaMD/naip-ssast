@@ -5,11 +5,10 @@ can be downloaded from the github to use for finetuning.
 
 ## Known errors
 Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
-1. The pretraining forward loop is not functional - it is expecting input to be a different size than it is and it is unclear why.
-2. If you pass any value above 0 for `num_workers`, you will get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
-3. Mixup is not yet supported, weighted averaging hasn't been debugged.
-4. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
-5. The current basic fine-tuning loop does NOT set the learning rate for the optimizer, and instead uses the default AdamW optimizer. Future update will make this flexible. Additionally, only one optimizer and loss function is currently available (binary cross entropy loss, Adam/AdamW optimizer). We may add more options in the future. 
+1. If you pass any value above 0 for `num_workers`, you will get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
+2. Mixup is not yet supported, weighted averaging hasn't been debugged.
+3. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
+4. The current basic fine-tuning loop does NOT set the learning rate for the optimizer, and instead uses the default AdamW optimizer. Future update will make this flexible. Additionally, only one optimizer and loss function is currently available (binary cross entropy loss, Adam/AdamW optimizer). We may add more options in the future. 
 
 ## Running requirements
 When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models) section
@@ -74,11 +73,10 @@ Outside of the regular audio configurations, you can also set a boolean value fo
 
 ### Model Classes
 One other difference between the original implementation and ours is that we attempted to remove all branching logic in the model initialization so as to make it possible to visualize attention. As such,
-we split the orignal `ASTModel class` into `ASTModel_pretrain` and `ASTModel_finetune`. As of now, only the `ASTModel_finetune` class is available. Please see [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py) for specifics on what arguments it takes and what the default values are. 
+we split the orignal `ASTModel class` into `ASTModel_pretrain` and `ASTModel_finetune`. Please see [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py) for specifics on what arguments it takes and what the default values are. 
 
 Please note the following conditions of the model classes:
-1. The pretraining forward loop is non-functional, but the class is necessary for building the structure for loading in a pre-trained model before fine-tuning. There is a input size mismatch in this forward loop that seems to stem from the original code and the fix has not been found.
-2. When loading in a pre-trained model in the `ASTModel_finetune` class, you must pass it only a pre-trained model such as those downloadable from [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models). If you are trying to load a finetuned model for only evaluating, the class will throw errors as relevant information is missing or stored differently in the saved fine-tuned models. To load these models, you must instead load one of the pre-trained only models, then include an additional load statement ```ast_mdl.load_state_dict(torch.load(finetuned_mdl_path))``` which will load in the proper values for evaluation. 
+1. When loading in a pre-trained model in the `ASTModel_finetune` class, you must pass it only a pre-trained model such as those downloadable from [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models). If you are trying to load a finetuned model for only evaluating, the class will throw errors as relevant information is missing or stored differently in the saved fine-tuned models. To load these models, you must instead load one of the pre-trained only models, then include an additional load statement ```ast_mdl.load_state_dict(torch.load(finetuned_mdl_path))``` which will load in the proper values for evaluation. 
 
 ### run_mayo.py 
 The command line usable, start-to-finish implementation of SSAST is available with [run_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.py). There is also a notebook implementation: [run_mayo.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.ipynb). This implementation completes fine-tuning and evaluation of a fine-tuned model. It DOES NOT return embeddings. Please see [get_embeddings.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.py) for this functionality. 
@@ -111,7 +109,7 @@ Notes:
 - you can alter additional model parameters. 
 
 ### New traintest function
-We slightly altered the original train/validation functions for fine-tuning. The new version is available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py)
+We slightly altered the original train/validation functions for fine-tuning and pre-training. The new versions are available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py) for fine-tuning and [traintest_mask_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mask_mayo.py) for pre-training.
 
 ## Embeddings
 To take in a fine-tuned model and get embeddings from the model for dataset, use [get_embeddings.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.py) or the notebook version [get_embeddings.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.ipynb).

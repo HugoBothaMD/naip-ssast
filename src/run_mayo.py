@@ -210,7 +210,7 @@ def run(args, target_labels, bucket):
             ast_mdl = trainmask(args=args, audio_model=ast_mdl, train_loader=train_loader, eval_loader=eval_loader)
             #we do not have enough data to actually pretrain and test, so for our purposes, treating evaluation set as validation set for debugging purposes
             print('Pretraining done with test set for validation set due to limited data. No other sample to test with so no evaluation.')
-            return None
+            return ast_mdl
         else:
             print('Now starting fine-tuning for {:d} epochs'.format(args.epochs))
             #rather than the entire lr scheduler process, you can choose to run a simple finetuning method + get AUCsjft

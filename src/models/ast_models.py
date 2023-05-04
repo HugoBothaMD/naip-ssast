@@ -38,6 +38,7 @@ class PatchEmbed(nn.Module):
     def forward(self, x):
         x = self.proj(x).flatten(2).transpose(1, 2)
         return x
+        return x
 
 def get_sinusoid_encoding(n_position, d_hid):
     ''' Sinusoid position encoding table '''
@@ -193,7 +194,7 @@ class ASTModel_pretrain(nn.Module):
         input = self.unfold(x).transpose(1, 2)
         B = x.shape[0]
         # x in shape (batch_size, sequence_len, embedding dim)
-        x = self.v.patch_embed(input)
+        x = self.v.patch_embed(x)
 
         # encode the patch
         # size 12(batch_size) * 100(#mask_patch) * 768(hidden_dim), prepare to save the true values of masked samples
@@ -285,10 +286,7 @@ class ASTModel_pretrain(nn.Module):
 
     # # masked patch pretraining with generative objective
     def mpg(self, input, mask_patch, cluster):
-        input = self.unfold(x).transpose(1, 2)
-        B = x.shape[0]
-        # x in shape (batch_size, sequence_len, embedding dim)
-        x = self.v.patch_embed(input)
+        B = input.shape[0]
         x = self.v.patch_embed(input)
         input = self.unfold(input).transpose(1, 2)
 
