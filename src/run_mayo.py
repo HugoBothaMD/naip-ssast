@@ -63,16 +63,21 @@ def basic_finetune(args, ast_mdl, train_loader):
     '''
     Run simple fine-tuning - BCE loss, AdamW optimizer - basic training loop
     '''
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    ast_mdl.to(device)
     criterion = torch.nn.BCEWithLogitsLoss()
     
     #does not change anything about learning rates and what not
     optim = torch.optim.AdamW([p for p in ast_mdl.parameters() if p.requires_grad])
 
+    ast_mdl.train()
     for e in range(args.epochs):
         running_loss = 0
         for i, batch in enumerate(train_loader):
             x = batch['fbank']
+            x = x.to(device)
             targets = batch['targets'] #have to change to select targets like this
+            targets = targets.to(device)
             optim.zero_grad()
             o =  ast_mdl(x) #no need for task + give just fbank
             loss = criterion(o, targets)
@@ -94,13 +99,17 @@ def basic_eval(ast_mdl, eval_loader):
     '''
     #does not change anything about learning rates and what not
     optim = torch.optim.AdamW([p for p in ast_mdl.parameters() if p.requires_grad])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    ast_mdl.to_device()
     ast_mdl.eval()
     all_preds=[]
     all_targets=[]
     for i, batch in enumerate(eval_loader):
         x = batch['fbank']
+        x = x.to(device)
         targets = batch['targets']
+        targets = targets.to(device)
         optim.zero_grad()
         o=ast_mdl(x)
         all_preds.append(o)
@@ -113,8 +122,8 @@ def basic_metrics(preds, targets, target_labels, args):
     '''
     Get simple metrics: only returns AUC for each label
     '''
-    pred_mat=torch.sigmoid(torch.cat(preds)).detach().numpy()
-    target_mat=torch.cat(targets).detach().numpy()
+    pred_mat=torch.sigmoid(torch.cat(preds)).cpu().detach().numpy()
+    target_mat=torch.cat(targets).cpu().detach().numpy()
     aucs=roc_auc_score(target_mat, pred_mat, average = None)
     print(aucs)
     data = [
@@ -159,19 +168,18 @@ def run(args, target_labels, bucket):
 
     #(5) set up model based on specified task
     if 'pretrain' in args.task:
-        print('Pretraining not supported.')
-        return None
-        # cluster = (args.num_mel_bins != args.fshape)
-        # if cluster == True:
-        #     print('The num_mel_bins {:d} and fshape {:d} are different, not masking a typical time frame, using cluster masking.'.format(args.num_mel_bins, args.fshape))
-        # else:
-        #     print('The num_mel_bins {:d} and fshape {:d} are same, masking a typical time frame, not using cluster masking.'.format(args.num_mel_bins, args.fshape))
-        # #PRETRAIN
-        # # no label dimension needed as it is self-supervised, fshape=fstride and tshape=tstride
-        # ast_mdl = ASTModel_pretrain(fshape=args.fshape, tshape=args.tshape,
-        #                             fstride=args.fshape, tstride=args.tshape,
-        #                             input_fdim=args.num_mel_bins, input_tdim=args.target_length,
-        #                             model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path)
+        cluster = (args.num_mel_bins != args.fshape)
+        if cluster == True:
+            print('The num_mel_bins {:d} and fshape {:d} are different, not masking a typical time frame, using cluster masking.'.format(args.num_mel_bins, args.fshape))
+        else:
+            print('The num_mel_bins {:d} and fshape {:d} are same, masking a typical time frame, not using cluster masking.'.format(args.num_mel_bins, args.fshape))
+        #PRETRAIN
+        # no label dimension needed as it is self-supervised, fshape=fstride and tshape=tstride
+        ast_mdl = ASTModel_pretrain(fshape=args.fshape, tshape=args.tshape,
+                                    fstride=args.fshape, tstride=args.tshape,
+                                    input_fdim=args.num_mel_bins, input_tdim=args.target_length,
+                                    model_size=args.model_size, load_pretrained_mdl_path=None) 
+        print('Note that pre-training further from an already pre-trained model is not supported. If it becomes supported, will need to alter the load_pretrained_mdl_path variable in model initalization')
     else:
         ast_mdl = ASTModel_finetune(task=args.task, label_dim=args.n_class, 
                                     fshape=args.fshape, tshape=args.tshape, 
@@ -235,7 +243,7 @@ def main():
     #librosa vs torchaudio
     parser.add_argument('--lib', default=True, type=bool, help="Specify whether to load using librosa as compared to torch audio")
     #output
-    parser.add_argument('-o',"--exp_dir", type=str, default="/Users/m144443/Documents/mayo_ssast/experiments", help="directory to dump experiments")
+    parser.add_argument('-o',"--exp_dir", type=str, default="/Users/m144443/Documents/mayo_ssast/experiments_pretrain", help="directory to dump experiments")
     #Audio configuration parameters
     parser.add_argument("--dataset", default='mayo',type=str, help="the dataset used for training")
     parser.add_argument("--dataset_mean", default=-4.2677393, type=float, help="the dataset mean, used for input normalization")
@@ -258,14 +266,14 @@ def main():
     parser.add_argument("--noise", type=bool, default=False, help="specify if augment noise in finetuning")
     parser.add_argument("--skip_norm", type=bool, default=False, help="specify whether to skip normalization on spectrogram")
     #Model parameters
-    parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
+    parser.add_argument("--task", type=str, default='pretrain_joint', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
     parser.add_argument("--fstride", type=int, default=128,help="soft split freq stride, overlap=patch_size-stride")
     parser.add_argument("--tstride", type=int, default=2, help="soft split time stride, overlap=patch_size-stride")
     parser.add_argument("--fshape", type=int, default=128,help="shape of patch on the frequency dimension")
     parser.add_argument("--tshape", type=int, default=2, help="shape of patch on the time dimension")
     parser.add_argument('--model_size', default='base',help='the size of AST models', type=str)
     #Training parameters
-    parser.add_argument('--batch_size', default=8, type=int, metavar='N', help='mini-batch size')
+    parser.add_argument('--batch_size', default=1, type=int, metavar='N', help='mini-batch size')
     parser.add_argument('--num_workers', default=0, type=int, metavar='NW', help='# of workers for dataloading (default: 32)')
     parser.add_argument("--epochs", type=int, default=1, help="number of maximum training epochs")
     parser.add_argument("--loss", type=str, default="BCE", help="the loss function for finetuning, depend on the task", choices=["BCE", "CE"])

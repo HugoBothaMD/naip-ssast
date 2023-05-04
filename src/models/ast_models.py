@@ -60,18 +60,21 @@ class ASTModel_pretrain(nn.Module):
                  input_fdim=128, input_tdim=1024, model_size='base', load_pretrained_mdl_path=None):
         super(ASTModel_pretrain, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
-
+            # override timm input shape restriction
+        timm.models.vision_transformer.PatchEmbed = PatchEmbed
         #TODO: fix
         if load_pretrained_mdl_path != None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            sd = torch.load(load_pretrained_mdl_path, map_location=device)
-            # get the fshape and tshape, input_fdim and input_tdim in the pretraining stage
-            try:
-                p_fshape, p_tshape = sd['module.v.patch_embed.proj.weight'].shape[2], sd['module.v.patch_embed.proj.weight'].shape[3]
-                p_input_fdim, p_input_tdim = sd['module.p_input_fdim'].item(), sd['module.p_input_tdim'].item()
-            except:
-                raise  ValueError('The model loaded is not from a torch.nn.Dataparallel object. Wrap it with torch.nn.Dataparallel and try again.')
-                #raise ValueError('Setting load_pretrained_mdl_path at pretraining stage is useless, pretraining is always from scratch, please change it to None.')
+            print('loading pretrained model not yet supported')
+            raise ValueError('load_pretrained_mdl_path should be None')
+        #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        #     sd = torch.load(load_pretrained_mdl_path, map_location=device)
+        #     # get the fshape and tshape, input_fdim and input_tdim in the pretraining stage
+        #     try:
+        #         p_fshape, p_tshape = sd['module.v.patch_embed.proj.weight'].shape[2], sd['module.v.patch_embed.proj.weight'].shape[3]
+        #         p_input_fdim, p_input_tdim = sd['module.p_input_fdim'].item(), sd['module.p_input_tdim'].item()
+        #     except:
+        #         raise  ValueError('The model loaded is not from a torch.nn.Dataparallel object. Wrap it with torch.nn.Dataparallel and try again.')
+        #         #raise ValueError('Setting load_pretrained_mdl_path at pretraining stage is useless, pretraining is always from scratch, please change it to None.')
         if fstride != fshape or tstride != tshape:
             raise ValueError('fstride != fshape or tstride != tshape, they must be same at the pretraining stage, patch split overlapping is not supported.')
 
