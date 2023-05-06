@@ -1,5 +1,7 @@
 '''
-Sample audio Dataset format (WaveformDataset) + transformation classes
+Sample audio Dataset format (WaveformDataset) + transformation classes.
+
+Transforms from SSAST added (https://github.com/YuanGongND/ssast/tree/main/src/run.py)
 
 Author(s): Neurology AI Program (NAIP) at Mayo Clinic
 Last modified: 04/2023

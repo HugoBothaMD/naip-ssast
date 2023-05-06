@@ -14,11 +14,11 @@ Before installing any packages or attempting to run the code, be aware of the fo
 When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models) section
 of the original SSAST github. The code is compatible with other model types, but has not been tested with them.
 
-The environment must include the following packages, all of which can be downloaded with pip:
-* opencv-python
+The environment must include the following packages, all of which can be downloaded with pip or conda:
 * albumentations (has not yet been tested in GCP environment)
 * librosa
 * torch, torchvision, torchaudio
+* tqdm (this is essentially enumerate(dataloader) except it prints out a nice progress bar for you)
 
 If running on your local machine and not in a GCP environement, you will also need to install:
 * google-cloud
@@ -81,7 +81,7 @@ Please note the following conditions of the model classes:
 ### run_mayo.py 
 The command line usable, start-to-finish implementation of SSAST is available with [run_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.py). There is also a notebook implementation: [run_mayo.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run_mayo.ipynb). This implementation completes fine-tuning and evaluation of a fine-tuned model. It DOES NOT return embeddings. Please see [get_embeddings.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/get_embeddings.py) for this functionality. 
 
-There are many possible arguments to set, including all the parameters associated with audio configuration (see [Data loading]((https://github.com/dwiepert/mayo-ssast#dataloading??)). The main run function describes most of these, and you can alter defaults as required. Run We will list some of the most important.
+There are many possible arguments to set, including all the parameters associated with audio configuration (see [Data loading]((https://github.com/dwiepert/mayo-ssast#dataloading??)). The main run function describes most of these, and you can alter defaults as required. We will list some of the most important.
 
 * `-i`: sets the `prefix` or input directory. Compatible with both local and GCS bucket directories containing audio files, though do not include 'gs://'
 * `-d`: sets the `data_split_root` directory. This is a full file path to a directory containing a train.csv and test.csv of file names. This path should include 'gs://' if it is located in a bucket. 

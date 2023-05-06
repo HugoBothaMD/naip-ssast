@@ -6,7 +6,17 @@
 # @File    : ast_models.py
 
 # the unified ast models for all pretraining/fine-tuning tasks.
+'''
+AST Model classes
+All the functionality/code is the same as the original SSAST, but has been split into two classes to remove branching logic in fine-tuning.
 
+Now ASTModel_pretrain and ASTModel_finetune
+
+Last modified: 05/2023
+Author: Daniela Wiepert
+Email: wiepert.daniela@mayo.edu
+File: ast_models.py
+'''
 import torch.nn as nn
 import torch
 import sys
@@ -55,7 +65,7 @@ def get_sinusoid_encoding(n_position, d_hid):
 
 class ASTModel_pretrain(nn.Module):
     '''
-    Edited by Daniela Wiepert
+    Edited pretraining class
     '''
     def __init__(self, fshape=128, tshape=2, fstride=128, tstride=2,
                  input_fdim=128, input_tdim=1024, model_size='base', load_pretrained_mdl_path=None):
@@ -81,20 +91,23 @@ class ASTModel_pretrain(nn.Module):
 
         # if AudioSet pretraining is not used (but ImageNet pretraining may still apply)
                 # if AudioSet pretraining is not used (but ImageNet pretraining may still apply)
+       
+        pretrained=False
+
         if model_size == 'tiny':
-            self.v = timm.create_model('vit_deit_tiny_distilled_patch16_224', pretrained=False)
+            self.v = timm.create_model('vit_deit_tiny_distilled_patch16_224', pretrained=pretrained)
             self.heads, self.depth = 3, 12
             self.cls_token_num = 2
         elif model_size == 'small':
-            self.v = timm.create_model('vit_deit_small_distilled_patch16_224', pretrained=False)
+            self.v = timm.create_model('vit_deit_small_distilled_patch16_224', pretrained=pretrained)
             self.heads, self.depth = 6, 12
             self.cls_token_num = 2
         elif model_size == 'base':
-            self.v = timm.create_model('vit_deit_base_distilled_patch16_384', pretrained=False)
+            self.v = timm.create_model('vit_deit_base_distilled_patch16_384', pretrained=pretrained)
             self.heads, self.depth = 12, 12
             self.cls_token_num = 2
         elif model_size == 'base_nokd':
-            self.v = timm.create_model('vit_deit_base_patch16_384', pretrained=False)
+            self.v = timm.create_model('vit_deit_base_patch16_384', pretrained=pretrained)
             self.heads, self.depth = 12, 12
             self.cls_token_num = 1
         else:
@@ -350,7 +363,7 @@ class ASTModel_pretrain(nn.Module):
 
 class ASTModel_finetune(nn.Module):
     '''
-    Edited by Daniela Wiepert
+     Edited finetuning class
     '''
     def __init__(self, task='cls',label_dim=527,
                  fshape=128, tshape=2, fstride=128, tstride=2,
@@ -491,68 +504,3 @@ class ASTModel_finetune(nn.Module):
         return self.finetuningtask(x)
     
 
-if __name__ == '__main__':
-    # this is an example of how to use the SSAST model
-
-    # pretraining stage
-    # suppose you have an unlabled dataset with avg length of 1024 frames (i.e., 10.24s)
-    input_tdim = 1024
-    # create a 16*16 patch based AST model for pretraining.
-    # note, we don't use patch split overlap in pretraining, so fstride=fshape and tstride=tshape
-    ast_mdl = ASTModel(
-                 fshape=16, tshape=16, fstride=16, tstride=16,
-                 input_fdim=128, input_tdim=input_tdim, model_size='base',
-                 pretrain_stage=True)
-    # # alternatively, create a frame based AST model
-    # ast_mdl = ASTModel(
-    #              fshape=128, tshape=2, fstride=128, tstride=2,
-    #              input_fdim=128, input_tdim=input_tdim, model_size='base',
-    #              pretrain=True)
-
-    # do pretraining, see src/traintest_mask.py for our full pretraining code
-    # input in shape [batch_size, input_tdim, input_fdim]
-    test_input = torch.zeros([10, input_tdim, 128])
-    # mask 100 patches for both discriminative and generative loss
-    acc, nce_loss = ast_mdl(test_input, task='pretrain_mpc', mask_patch=100)
-    mse_loss = ast_mdl(test_input, task='pretrain_mpg', mask_patch=100)
-    loss = nce_loss + 10 * mse_loss
-    # do back propagate and update the model, etc
-
-    # after pretraining, save the pretrained model.
-    # the code is designed for Dataparallel model
-    ast_mdl = torch.nn.DataParallel(ast_mdl)
-    torch.save(ast_mdl.state_dict(), './test_mdl.pth')
-
-    # fine-tuning stage
-    # now you have a labeled dataset you want to finetune AST on
-    # suppose the avg length is 100 frames (1s) and there are 35 classes
-    # the fshape and tshape must be same in pretraining and finetuning
-    # but fstride and tstride can be different in pretraining and finetuning
-    # using smaller strides improves the performance but also increase the computational overhead
-    # set pretrain_stage as False since now is in the finetuning stage
-    # provide the path of the pretrained model you want to load
-    input_tdim = 100  # fine-tuning data length can be different with pretraining data length
-    ast_mdl = ASTModel(label_dim=35,
-                 fshape=16, tshape=16, fstride=10, tstride=10,
-                 input_fdim=128, input_tdim=input_tdim, model_size='base',
-                 pretrain_stage=False, load_pretrained_mdl_path='./test_mdl.pth')
-    # # alternatively, use a frame based AST model
-    # ast_mdl = ASTModel(label_dim=35,
-    #              fshape=128, tshape=2, fstride=128, tstride=1,
-    #              input_fdim=128, input_tdim=input_tdim, model_size='base',
-    #              pretrain_stage=False, load_pretrained_mdl_path='./test_mdl.pth')
-
-    # do finetuning, see src/traintest.py for our finetuning code
-    test_input = torch.zeros([10, input_tdim, 128])
-    prediction = ast_mdl(test_input, task='ft_avgtok')
-    # output should in shape [batch_size, label_dim]
-    print(prediction.shape)
-    # calculate the loss, do back propagate, etc
-
-    # # (optional) do some probe test
-    # test_input = torch.zeros([1, input_tdim, 128]).to(device)
-    # acc, nce = ast_mdl(test_input, task='pretrain_mpc', mask_patch=100)
-    # # you can visualize the mask
-    # pred, masked = ast_mdl(test_input, task='visualize_mask', mask_patch=100)
-    # plt.imshow(masked[0,0])
-    # plt.show()

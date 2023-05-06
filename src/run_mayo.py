@@ -9,7 +9,7 @@ SSAST run function
 Can perform pre-training or fine-tuning
 Option for fine-tuning only a classification head
 
-Reformated and edited based on code from Yuan Gong (https://github.com/YuanGongND/ssast/tree/main/src/dataloader.py) 
+Reformated and edited based on code from Yuan Gong (https://github.com/YuanGongND/ssast/tree/main/src/run.py) 
 
 Last modified: 04/2023
 Author: Daniela Wiepert
@@ -118,7 +118,7 @@ def basic_eval(ast_mdl, eval_loader):
     
     return all_preds, all_targets    
 
-def basic_metrics(preds, targets, target_labels, args):
+def basic_metrics(preds, targets, args):
     '''
     Get simple metrics: only returns AUC for each label
     '''
@@ -126,14 +126,11 @@ def basic_metrics(preds, targets, target_labels, args):
     target_mat=torch.cat(targets).cpu().detach().numpy()
     aucs=roc_auc_score(target_mat, pred_mat, average = None)
     print(aucs)
-    data = [
-    ('Label', target_labels),
-    ('AUC', target_labels)]
-    data = pd.DataFrame({'Label':target_labels, 'AUC':aucs})
+    data = pd.DataFrame({'Label':args.target_labels, 'AUC':aucs})
     data.to_csv(os.path.join(args.exp_dir, 'basic_metrics.csv'), index=False)
     return data
 
-def run(args, target_labels, bucket):
+def run(args, bucket):
     '''
     Run fine-tuning/pre-training
 
@@ -154,9 +151,9 @@ def run(args, target_labels, bucket):
                     'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
     
     #(3) Generate audio dataset, note that if bucket not given, it assumes None and loads from local files
-    train_dataset = AudioDataset(annotations_df=train_df, target_labels=target_labels, audio_conf=train_audio_conf, 
+    train_dataset = AudioDataset(annotations_df=train_df, target_labels=args.target_labels, audio_conf=train_audio_conf, 
                                  prefix=args.prefix, bucket=bucket, librosa=args.lib) #librosa = True (might need to debug this one)
-    eval_dataset = AudioDataset(annotations_df=test_df, target_labels=target_labels, audio_conf=eval_audio_conf, 
+    eval_dataset = AudioDataset(annotations_df=test_df, target_labels=args.target_labels, audio_conf=eval_audio_conf, 
                                 prefix=args.prefix, bucket=bucket, librosa=args.lib)
 
     #(4) set up data loaders
@@ -226,7 +223,7 @@ def run(args, target_labels, bucket):
     #(8) evaluation:
     if args.basic:
         preds, targets = basic_eval(ast_mdl, eval_loader)
-        metrics = basic_metrics(preds, targets, target_labels, args)
+        metrics = basic_metrics(preds, targets, args)
     else:
         evaluation(args=args, audio_model=ast_mdl, eval_loader=eval_loader, val_loader=None)
 
@@ -320,6 +317,7 @@ def main():
     with open(args.label_txt) as f:
         target_labels = f.readlines()
     target_labels = [l.strip() for l in target_labels]
+    args.target_labels = target_labels
     
     args.n_class = len(target_labels)
 
@@ -327,7 +325,7 @@ def main():
         print('Mixup not yet supported, setting mixup to 0')
         args.mixup = 0
 
-    run(args, target_labels, bucket)
+    run(args, bucket)
         
 if __name__ == "__main__":
     main()
