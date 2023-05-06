@@ -47,7 +47,10 @@ def collate_fn(batch):
     else:
         waveform = None
     
-    fbank = torch.stack([item['fbank'] for item in batch])
+    if 'fbank' in batch[0]:
+        fbank = torch.stack([item['fbank'] for item in batch])
+    else:
+        fbank = None
     uid = [item['uid'] for item in batch]
     sr = [item['sample_rate'] for item in batch]
     targets = torch.stack([item['targets'] for item in batch])
