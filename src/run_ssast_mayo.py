@@ -40,7 +40,7 @@ from traintest_mask_mayo import *
 from utilities.dataloader_utils import collate_fn
 
 
-def load_data(data_split_root):
+def load_traintest(data_split_root):
     '''
     This function assumes data loading based on previous notebooks - if anything changes with the 
     CSVs or columns need to be altered differently, this is the function to change
@@ -130,6 +130,7 @@ def basic_metrics(preds, targets, args):
     data.to_csv(os.path.join(args.exp_dir, 'basic_metrics.csv'), index=False)
     return data
 
+
 def run(args, bucket):
     '''
     Run fine-tuning/pre-training
@@ -137,7 +138,8 @@ def run(args, bucket):
     Takes in arg parser arg list, list of target labels, and a GCS bucket
     '''
     #(1) Load data, note that we are not doing any validation
-    train_df, test_df = load_data(args.data_split_root)
+    assert '.csv' not in args.data_split_root, f'May have given a full file path, please confirm this is a directory: {args.data_split_root}'
+    train_df, test_df = load_traintest(args.data_split_root)
 
     #(2) set audio configurations (again, no val_loader because no validation set)
     train_audio_conf = {'dataset': args.dataset, 'mode': 'train', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
@@ -193,32 +195,20 @@ def run(args, bucket):
             params = sum([np.prod(p.size()) for p in model_parameters])
             print(f'Number of trainable parameters: {params}')
     
-    #(6) set up save directory
-    print("\nCreating experiment directory: %s" % args.exp_dir)
-    if not os.path.exists(args.exp_dir):
-        os.makedirs(args.exp_dir)
-    with open("%s/args.pkl" % args.exp_dir, "wb") as f:
-        pickle.dump(args, f)
-    
-    if not args.eval_only:
-        #(7) Run models
-        if 'pretrain' in args.task:
-            print('Now starting self-supervised pretraining for {:d} epochs'.format(args.epochs))
-            ast_mdl = trainmask(args=args, audio_model=ast_mdl, train_loader=train_loader, eval_loader=eval_loader)
-            #we do not have enough data to actually pretrain and test, so for our purposes, treating evaluation set as validation set for debugging purposes
-            print('Pretraining done with test set for validation set due to limited data. No other sample to test with so no evaluation.')
-            return ast_mdl
-        else:
-            print('Now starting fine-tuning for {:d} epochs'.format(args.epochs))
-            #rather than the entire lr scheduler process, you can choose to run a simple finetuning method + get AUCsjft
-            if args.basic:
-                ast_mdl = basic_finetune(args, ast_mdl, train_loader)
-            else:
-                ast_mdl = train(args=args, audio_model=ast_mdl, train_loader=train_loader, val_loader=None)
+    #(7) Run models
+    if 'pretrain' in args.task:
+        print('Now starting self-supervised pretraining for {:d} epochs'.format(args.epochs))
+        ast_mdl = trainmask(args=args, audio_model=ast_mdl, train_loader=train_loader, eval_loader=eval_loader)
+        #we do not have enough data to actually pretrain and test, so for our purposes, treating evaluation set as validation set for debugging purposes
+        print('Pretraining done with test set for validation set due to limited data. No other sample to test with so no evaluation.')
+        return ast_mdl
     else:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        sd = torch.load(args.mdl_path, map_location=device)
-        ast_mdl.load_state_dict(sd, strict=False)
+        print('Now starting fine-tuning for {:d} epochs'.format(args.epochs))
+        #rather than the entire lr scheduler process, you can choose to run a simple finetuning method + get AUCsjft
+        if args.basic:
+            ast_mdl = basic_finetune(args, ast_mdl, train_loader)
+        else:
+            ast_mdl = train(args=args, audio_model=ast_mdl, train_loader=train_loader, val_loader=None)
     
     #(8) evaluation:
     if args.basic:
@@ -227,11 +217,55 @@ def run(args, bucket):
     else:
         evaluation(args=args, audio_model=ast_mdl, eval_loader=eval_loader, val_loader=None)
 
+def eval_only(args, bucket):
+    #(1) Load data, note that we are not doing any validation
+    assert '.csv' in args.data_split_root, f'A csv file is necessary for embedding extraction. Please make sure this is a full file path: {args.data_split_root}'
+    test_df = pd.read_csv(args.data_split_root, index_col = 'uid')
+    test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
+
+    #(2) set audio configurations (again, no val_loader because no validation set)
+    eval_audio_conf = {'dataset': args.dataset, 'mode': 'evaluation', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
+                    'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
+                    'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
+                    'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
+    
+    #(3) Generate audio dataset, note that if bucket not given, it assumes None and loads from local files
+    eval_dataset = AudioDataset(annotations_df=test_df, target_labels=args.target_labels, audio_conf=eval_audio_conf, 
+                                prefix=args.prefix, bucket=bucket, librosa=args.lib)
+
+    #(4) set up data loaders
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, collate_fn=collate_fn)
+
+
+    #(5) set up model for evaluation
+    ast_mdl = ASTModel_finetune(task=args.task, label_dim=args.n_class, 
+                                fshape=args.fshape, tshape=args.tshape, 
+                                fstride=args.fstride, tstride=args.tstride,
+                                input_fdim=args.num_mel_bins, input_tdim=args.target_length, 
+                                model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path)
+
+  
+    #(6) load in model
+    if args.mdl_path is None:
+        print(f'Evaluating only a pretrained model: {args.pretrained_mdl_path}')
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        sd = torch.load(args.mdl_path, map_location=device)
+        ast_mdl.load_state_dict(sd, strict=False)
+    
+    #(7) evaluation:
+    if args.basic:
+        preds, targets = basic_eval(ast_mdl, eval_loader)
+        metrics = basic_metrics(preds, targets, args)
+    else:
+        evaluation(args=args, audio_model=ast_mdl, eval_loader=eval_loader, val_loader=None)
+    
+
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     #data loading
     parser.add_argument('-i','--prefix',default='speech_ai/speech_lake/speech_poc_freeze_1', help='Input directory or location in google cloud storage bucket containing files to load')
-    parser.add_argument('-d','--data_split_root', default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620', help='path to datasplit csvs. Assumes it points to a directory with a train.csv and test.csv')
+    parser.add_argument("-d", "--data_split_root", default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation expects a single .csv file.")
     parser.add_argument('-l','--label_txt', default='/Users/m144443/Documents/mayo_ssast/src/labels.txt')
     parser.add_argument("--n_class", type=int, default=13, help="number of classes")
     #GCS
@@ -282,7 +316,7 @@ def main():
     parser.add_argument("--n-print-steps", type=int, default=100, help="number of steps to print statistics")
     parser.add_argument('--save_model', help='save the models or not', type=ast.literal_eval, default='True')
     #fine-tuning parameters
-    parser.add_argument("--pretrained_mdl_path", type=str, help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
+    parser.add_argument("--pretrained_mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
     parser.add_argument("--freeze",type=bool, default=True, help="Specify whether to freeze original model before fine-tuning")
     parser.add_argument("--basic", type=bool, default=True, help="run basic finetuning/metrics rather than altering lr or anything else")
     parser.add_argument("--head_lr", type=int, default=1, help="the factor of mlp-head_lr/lr, used in some fine-tuning experiments only")
@@ -309,10 +343,6 @@ def main():
     else:
         bucket = None
 
-    # if 'pretrain' in args.task:
-    #     if args.freeze:
-    #         args.freeze=False
-
     #get list of target labels
     with open(args.label_txt) as f:
         target_labels = f.readlines()
@@ -325,7 +355,16 @@ def main():
         print('Mixup not yet supported, setting mixup to 0')
         args.mixup = 0
 
-    run(args, bucket)
+    print("\nCreating experiment directory: %s" % args.exp_dir)
+    if not os.path.exists(args.exp_dir):
+        os.makedirs(args.exp_dir)
+    with open("%s/args.pkl" % args.exp_dir, "wb") as f:
+        pickle.dump(args, f)
+
+    if args.eval_only:
+        eval_only(args, bucket)
+    else:
+        run(args, bucket)
         
 if __name__ == "__main__":
     main()

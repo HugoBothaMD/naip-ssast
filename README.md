@@ -9,6 +9,7 @@ Before installing any packages or attempting to run the code, be aware of the fo
 2. Mixup is not yet supported, weighted averaging hasn't been debugged.
 3. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
 4. The current basic fine-tuning loop does NOT set the learning rate for the optimizer, and instead uses the default AdamW optimizer. Future update will make this flexible. Additionally, only one optimizer and loss function is currently available (binary cross entropy loss, Adam/AdamW optimizer). We may add more options in the future. 
+5. The implementations in the run .py script and run notebook are slightly different in that the evaluation only was split into a separate function in the script + does not use the loading function. The functionality should be the same otherwise. 
 
 ## Running requirements
 When running with defaults, please download the SSAST-Base-Frame-400 model in the [pretrained model](https://github.com/YuanGongND/ssast#pretrained-models) section
@@ -106,7 +107,8 @@ Notes:
 - the code will automatically save the model
 - there are options to alter the learning rate and lr scheduler
 - there are options for weighted averaging in fine-tuning (`--wa` should be set to True)
-- you can alter additional model parameters. 
+- you can alter additional model parameters.
+- make sure that the arguments are set properly as there are not assertions for the arguments. 
 
 ### New traintest function
 We slightly altered the original train/validation functions for fine-tuning and pre-training. The new versions are available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py) for fine-tuning and [traintest_mask_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mask_mayo.py) for pre-training.
