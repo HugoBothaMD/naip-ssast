@@ -615,7 +615,6 @@ def get_embeddings(args):
     print('Embedding extraction finished')
     return df_embed
 
-
 def main():     
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     #Inputs
@@ -745,9 +744,16 @@ def main():
     if args.cloud:
         upload(args.cloud_dir, args_path, bucket)
 
-    #(8) add bucket to args
+    # (8) check that clip length has been set
+    if args.clip_length == 0:
+        try: 
+            assert args.batch_size == 1, 'Not currently compatible with different length wav files unless batch size has been set to 1'
+        except:
+            args.batch_size = 1
+
+    #(9) add bucket to args
     args.bucket = bucket
-    # (9) run model
+    # (10) run model
     print(args.mode)
 
     if args.mode == 'train':

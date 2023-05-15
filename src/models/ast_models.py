@@ -547,6 +547,12 @@ class ASTModel_finetune(nn.Module):
         return outputs
     
     def extract_embeddings(self, x, embedding_type='ft'):
+        """
+        Run model
+        :param input_values: input values to the model (batch_size, input_size)
+        :param embedding_type: 'ft' or 'pt' to indicate whether to extract from classification head or last hidden state
+        :return logits: classifier output (batch_size, num_labels)
+        """
         activation = {}
         def _get_activation(name):
             def _hook(model, input, output):
