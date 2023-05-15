@@ -24,7 +24,6 @@ File: traintest_mayo.py
 import datetime
 import os
 import pickle
-import sys
 import time
 
 #third party
@@ -36,8 +35,14 @@ from torch.cuda.amp import autocast,GradScaler
 #local
 from utilities import *
 
-def train(args, audio_model, train_loader, val_loader=None):
+def upload(gcs_prefix, path, bucket):
+    assert bucket is not None, 'no bucket given for uploading'
+    if gcs_prefix is None:
+        gcs_prefix = os.path.dirname(path)
+    blob = bucket.blob(os.path.join(gcs_prefix, os.path.basename(path)))
+    blob.upload_from_filename(path)
 
+def train(args, audio_model, train_loader, val_loader=None):
     #(1) check if running validation
     if val_loader is None:
         validation = False
@@ -72,6 +77,8 @@ def train(args, audio_model, train_loader, val_loader=None):
                 time.time() - start_time])
         with open("%s/progress.pkl" % exp_dir, "wb") as f:
             pickle.dump(progress, f)
+        if args.cloud:
+            upload(args.cloud_dir,"%s/progress.pkl" % exp_dir,args.bucket)
 
     #(4) make audio model a nn.DataParallel object if not already one and send to device
     if not isinstance(audio_model, nn.DataParallel):
@@ -180,6 +187,8 @@ def train(args, audio_model, train_loader, val_loader=None):
                       per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter), flush=True)
                 if np.isnan(loss_meter.avg):
                     print("yuan training diverged...")
+                    if not os.path.exists(os.path.join(exp_dir, 'models')):
+                        os.mkdir(os.path.join(exp_dir, 'models'))
                     torch.save(audio_model.state_dict(), "%s/models/nan_audio_model.pth" % (exp_dir))
                     torch.save(optimizer.state_dict(), "%s/models/nan_optim_state.pth" % (exp_dir))
                     with open(exp_dir + '/audio_input.npy', 'wb') as f:
@@ -187,6 +196,13 @@ def train(args, audio_model, train_loader, val_loader=None):
                     np.savetxt(exp_dir + '/audio_output.csv', audio_output.cpu().detach().numpy(), delimiter=',')
                     np.savetxt(exp_dir + '/labels.csv', labels.cpu().detach().numpy(), delimiter=',')
                     print('audio output and label saved for debugging.')
+                    if args.cloud:
+                        upload(args.cloud_dir, "%s/models/nan_audio_model.pth" % (exp_dir), args.bucket)
+                        upload(args.cloud_dir, "%s/models/nan_optim_state.pth" % (exp_dir), args.bucket)
+                        upload(args.cloud_dir, exp_dir + '/audio_input.npy', args.bucket)
+                        upload(args.cloud_dir, exp_dir + '/audio_output.csv', args.bucket)
+                        upload(args.cloud_dir, exp_dir + '/labels.csv', args.bucket)
+
                     #return
 
             end_time = time.time()
@@ -227,6 +243,9 @@ def train(args, audio_model, train_loader, val_loader=None):
                 result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, cum_acc, cum_mAUC, optimizer.param_groups[0]['lr']]
             np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
 
+            if args.cloud:
+                upload(args.cloud_dir,exp_dir + '/result.csv', args.bucket)
+
             print('validation finished')
 
             if mAP > best_mAP:
@@ -246,9 +265,15 @@ def train(args, audio_model, train_loader, val_loader=None):
             if best_epoch == epoch:
                 torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
                 torch.save(optimizer.state_dict(), "%s/models/best_optim_state.pth" % (exp_dir))
+                if args.cloud:
+                    upload(args.cloud_dir,"%s/models/best_audio_model.pth" % (exp_dir), args.bucket)
+                    upload(args.cloud_dir,"%s/models/best_optim_state.pth" % (exp_dir), args.bucket)
 
             with open(exp_dir + '/stats_' + str(epoch) +'.pickle', 'wb') as handle:
                 pickle.dump(stats, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+            if args.cloud:
+                upload(args.cloud_dir,exp_dir + '/stats_' + str(epoch) +'.pickle', args.bucket)
 
         else: #otherwise just print current training loss
             print("train_loss: {:.6f}".format(loss_meter.avg))
@@ -258,9 +283,16 @@ def train(args, audio_model, train_loader, val_loader=None):
         if not os.path.exists(os.path.join(exp_dir, 'models')):
             os.mkdir(os.path.join(exp_dir, 'models'))
         torch.save(audio_model.state_dict(), "%s/models/audio_model.%d.pth" % (exp_dir, epoch))
+        if args.cloud:
+            upload(args.cloud_dir, "%s/models/audio_model.%d.pth" % (exp_dir, epoch), args.bucket)
+                
+
         if len(train_loader.dataset) > 2e5:
             torch.save(optimizer.state_dict(), "%s/models/optim_state.%d.pth" % (exp_dir, epoch))
+            if args.cloud:
+                upload(args.cloud_dir, "%s/models/optim_state.%d.pth" % (exp_dir, epoch), args.bucket)
 
+        
         if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
             print('adaptive learning rate scheduler step')
             scheduler.step(mAP)
@@ -307,6 +339,8 @@ def train(args, audio_model, train_loader, val_loader=None):
             print("train_loss: {:.6f}".format(loss_meter.avg))
             print("valid_loss: {:.6f}".format(valid_loss))
             np.savetxt(exp_dir + '/wa_result.csv', wa_result)
+            if args.cloud:
+                upload(args.cloud_dir,exp_dir + '/wa_result.csv', args.bucket)
     
     return audio_model
 
@@ -364,6 +398,11 @@ def validate(audio_model, val_loader, args, epoch):
             np.savetxt(exp_dir+'/predictions/target.csv', target, delimiter=',')
         np.savetxt(exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', audio_output, delimiter=',')
 
+        if args.cloud:
+            upload(args.cloud_dir,exp_dir+'/predictions/target.csv', args.bucket)
+            upload(args.cloud_dir,exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', args.bucket)
+
+
     return stats, loss
 
 def validate_ensemble(args, epoch):
@@ -380,6 +419,8 @@ def validate_ensemble(args, epoch):
 
     cum_predictions = cum_predictions / epoch
     np.savetxt(exp_dir+'/predictions/cum_predictions.csv', cum_predictions, delimiter=',')
+    if args.cloud:
+        upload(args.cloud_dir,exp_dir+'/predictions/cum_predictions.csv', args.bucket)
 
     stats = calculate_stats(cum_predictions, target)
     return stats
@@ -413,6 +454,8 @@ def get_wa(audio_model, val_loader, args, start_epoch, end_epoch):
     audio_model.load_state_dict(sdA)
 
     torch.save(audio_model.state_dict(), exp_dir + '/models/audio_model_wa.pth')
+    if args.cloud:
+        upload(args.cloud_dir,exp_dir + '/models/audio_model_wa.pth', args.bucket)
 
     if validation:
         stats, loss = validate(audio_model, val_loader, args, 'wa')
@@ -450,5 +493,7 @@ def evaluation(args,audio_model, eval_loader, val_loader):
     print("Accuracy: {:.6f}".format(eval_acc))
     print("AUC: {:.6f}".format(eval_mAUC))
     np.savetxt(args.exp_dir + '/eval_result.csv', [val_acc, val_mAUC, eval_acc, eval_mAUC])
-    
+
+    if args.cloud:
+        upload(args.cloud_dir,args.exp_dir + '/eval_result.csv', args.bucket)
     

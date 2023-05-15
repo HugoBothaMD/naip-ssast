@@ -11,29 +11,21 @@ File: dataloader_mayo.py
 '''
 
 #IMPORTS
-#built-in
-import csv
-import io
-import json
-import random
-
 #third party
 import albumentations
-import cv2
-import librosa
 import numpy as np
 import pandas as pd
 import torch
-import torchaudio
+import torchvision
 import torch.nn.functional
 from torch.utils.data import Dataset
 
 #local
-from utilities.dataloader_utils import *
+from utilities import *
 
         
 class AudioDataset(Dataset):
-    def __init__(self, annotations_df, target_labels, audio_conf, prefix, bucket=None, librosa=False, cdo=False,shift=False,):
+    def __init__(self, annotations_df, target_labels, audio_conf, prefix, bucket=None, librosa=False, cdo=False,shift=False):
         '''
         Dataset that manages audio recordings. 
 
@@ -151,7 +143,7 @@ class AudioDataset(Dataset):
         wavmean = WaveMean()
         transform_list.append(wavmean)
 
-        transform = transforms.Compose(transform_list)
+        transform = torchvision.transforms.Compose(transform_list)
 
         #albumentations transforms
         al_transform = []
@@ -215,7 +207,7 @@ class AudioDataset(Dataset):
             #TODO:
             noise = Noise()
             transform_list.append(noise)
-        transform = transforms.Compose(transform_list)
+        transform = torchvision.transforms.Compose(transform_list)
         return transform
 
 
@@ -261,6 +253,3 @@ class AudioDataset(Dataset):
     def __len__(self):
         return len(self.annotations_df)
     
-
-
-        self.wave_transforms=get_train_transforms()

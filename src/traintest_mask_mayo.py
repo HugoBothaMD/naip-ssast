@@ -23,7 +23,6 @@ File: traintest_mask_mayo.py
 import datetime
 import os
 import pickle
-import sys
 import time
 
 #third party
@@ -35,6 +34,13 @@ from torch.cuda.amp import autocast,GradScaler
 #local
 from utilities import *
 
+def upload(gcs_prefix, path, bucket):
+    assert bucket is not None, 'no bucket given for uploading'
+    if gcs_prefix is None:
+        gcs_prefix = os.path.dirname(path)
+    blob = bucket.blob(os.path.join(gcs_prefix, os.path.basename(path)))
+    blob.upload_from_filename(path)
+    
 def trainmask(args, audio_model, train_loader, eval_loader):
     #(1) set GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,6 +68,9 @@ def trainmask(args, audio_model, train_loader, eval_loader):
         progress.append([epoch, global_step, best_epoch, time.time() - start_time])
         with open("%s/progress.pkl" % exp_dir, "wb") as f:
             pickle.dump(progress, f)
+        
+        if args.cloud:
+            upload(args.cloud_dir,"%s/progress.pkl" % exp_dir, args.bucket)
     
     #(3) make audio model a nn.DataParallel object if not already one and send to device
     if not isinstance(audio_model, nn.DataParallel):
@@ -181,6 +190,8 @@ def trainmask(args, audio_model, train_loader, eval_loader):
         print("nce loss eval: {:.6f}".format(nce_eval))
         result.append([train_acc_meter.avg, train_nce_meter.avg, acc_eval, nce_eval, optimizer.param_groups[0]['lr']])
         np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
+        if args.cloud:
+            upload(args.cloud_dir,exp_dir + '/result.csv', args.bucket)
 
         if not os.path.exists(os.path.join(exp_dir, 'models')):
             os.mkdir(os.path.join(exp_dir, 'models'))
@@ -188,9 +199,13 @@ def trainmask(args, audio_model, train_loader, eval_loader):
         if True:#acc > best_acc: CHANGES
             best_acc = acc
             torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
+            if args.cloud:
+                upload(args.cloud_dir, "%s/models/best_audio_model.pth" % (exp_dir), args.bucket)
 
         if len(train_loader.dataset) > 2e5:
             torch.save(optimizer.state_dict(), "%s/models/optim_state.pth" % (exp_dir))
+            if args.cloud:
+                upload(args.cloud_dir, "%s/models/optim_state.pth" % (exp_dir), args.bucket)
 
         # if the task is generation, stop after eval mse loss stop improve
         if args.task == 'pretrain_mpg':

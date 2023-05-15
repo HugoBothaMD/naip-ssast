@@ -17,18 +17,22 @@ Author: Daniela Wiepert
 Email: wiepert.daniela@mayo.edu
 File: ast_models.py
 '''
+#IMPORTS
+#built-in
+import random
+from random import randrange
+
+#third party
+import numpy as np
+import timm
 import torch.nn as nn
 import torch
-import sys
-sys.path.append("/data/sls/scratch/yuangong/aed-trans/src/models/")
-sys.path.append("/data/sls/scratch/yuangong/aed-trans/src/")
-from timm.models.layers import trunc_normal_
-import timm
-import numpy as np
-from timm.models.layers import to_2tuple
-from random import randrange
+
 from matplotlib import pyplot as plt
-import random
+from timm.models.layers import trunc_normal_, to_2tuple
+
+#local
+from utilities import ClassificationHead
 
 # override the timm package to relax the input shape constraint.
 class PatchEmbed(nn.Module):
@@ -159,10 +163,10 @@ class ASTModel_pretrain(nn.Module):
         trunc_normal_(self.v.pos_embed, std=.02)
 
         #TODO: fix
-        if load_pretrained_mdl_path != None:
-            self.v = torch.nn.DataParallel(self.v)
-            self.v.load_state_dict(sd, strict=False)
-            self.v = self.v.module.v
+        # if load_pretrained_mdl_path != None:
+        #     self.v = torch.nn.DataParallel(self.v)
+        #     self.v.load_state_dict(sd, strict=False)
+        #     self.v = self.v.module.v
 
 # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
@@ -363,11 +367,20 @@ class ASTModel_pretrain(nn.Module):
 
 class ASTModel_finetune(nn.Module):
     '''
-     Edited finetuning class
+    Edited finetuning class
+    Parameters:
+    :param task: finetuning task
+    :param model_size: model size to initialize - will run into errors if pretrained model path is a mismatch with this
+    :param load_pretrained_mdl_path: path to a pretrained model checkpoint
+    :param activation: activation function for classification head
+    :param final_dropout: amount of dropout to use in classification head
+    :param layernorm: include layer normalization in classification head
+    :param freeze: specify whether to freeze the pretrained model parameters
     '''
-    def __init__(self, task='cls',label_dim=527,
+    def __init__(self, task='ft_cls',label_dim=527,
                  fshape=128, tshape=2, fstride=128, tstride=2,
-                 input_fdim=128, input_tdim=1024, model_size='base',load_pretrained_mdl_path=None):
+                 input_fdim=128, input_tdim=1024, model_size='base',load_pretrained_mdl_path=None,
+                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True, pooling_mode='mean'):
 
         super(ASTModel_finetune, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
@@ -412,8 +425,7 @@ class ASTModel_finetune(nn.Module):
         self.cls_token_num = audio_model.module.cls_token_num
 
         # mlp head for fine-tuning
-        self.mlp_head = nn.Sequential(nn.LayerNorm(self.original_embedding_dim),
-                                        nn.Linear(self.original_embedding_dim, label_dim))
+        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm)
 
         f_dim, t_dim = self.get_shape(fstride, tstride, input_fdim, input_tdim, fshape, tshape)
         # patch array dimension during pretraining
@@ -451,6 +463,14 @@ class ASTModel_finetune(nn.Module):
 
         new_pos_embed = new_pos_embed.reshape(1, self.original_embedding_dim, num_patches).transpose(1, 2)
         self.v.pos_embed = nn.Parameter(torch.cat([self.v.pos_embed[:, :self.cls_token_num, :].detach(), new_pos_embed], dim=1))
+
+        if freeze:
+            for param in self.v.parameters():
+                param.requires_grad = False
+
+        #for embedding extraction
+        self.pooling_mode = pooling_mode
+
     
     # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
@@ -461,7 +481,7 @@ class ASTModel_finetune(nn.Module):
         t_dim = test_out.shape[3]
         return f_dim, t_dim
     
-    def finetuningbase(self, x):
+    def base_model(self, x):
         B = x.shape[0]
         x = self.v.patch_embed(x)
         if self.cls_token_num == 2:
@@ -500,7 +520,53 @@ class ASTModel_finetune(nn.Module):
         x = x.unsqueeze(1)
         x = x.transpose(2, 3)
 
-        x = self.finetuningbase(x)
+        x = self.base_model(x)
         return self.finetuningtask(x)
     
+    def merged_strategy(
+            self,
+            hidden_states,
+            mode="mean"
+    ):
+        """
+        Set up pooling method to reduce hidden state dimension
+        :param hidden_states: output from last hidden states layer
+        :param mode: pooling method (str, default="mean")
+        :return outputs: hidden_state pooled to reduce dimension
+        """
+        if mode == "mean":
+            outputs = torch.mean(hidden_states, dim=1)
+        elif mode == "sum":
+            outputs = torch.sum(hidden_states, dim=1)
+        elif mode == "max":
+            outputs = torch.max(hidden_states, dim=1)[0]
+        else:
+            raise Exception(
+                "The pooling method hasn't been defined! Your pooling mode must be one of these ['mean', 'sum', 'max']")
+
+        return outputs
+    
+    def extract_embeddings(self, x, embedding_type='ft'):
+        activation = {}
+        def _get_activation(name):
+            def _hook(model, input, output):
+                activation[name] = output.detach()
+            return _hook
+        
+        if embedding_type == 'ft':
+            self.mlp_head.head.dense.register_forward_hook(_get_activation('embeddings'))
+            
+            logits = self.forward(x)
+            e = activation['embeddings']
+        
+        elif embedding_type == 'pt':
+            x = x.unsqueeze(1)
+            x = x.transpose(2, 3)
+            last_state = self.base_model(x)
+            e = self.merged_strategy(last_state, mode=self.pooling_mode)
+
+        else:
+            raise ValueError('Embedding type must be finetune (ft) or pretrain (pt)')
+        
+        return e
 
