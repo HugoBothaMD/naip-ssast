@@ -162,12 +162,14 @@ class ASTModel_pretrain(nn.Module):
         self.v.pos_embed = new_pos_embed
         trunc_normal_(self.v.pos_embed, std=.02)
 
+        self.v_list = [k[0] for k in self.v.named_parameters()] #list of layer_names in base model
+
         #TODO: fix
         # if load_pretrained_mdl_path != None:
         #     self.v = torch.nn.DataParallel(self.v)
         #     self.v.load_state_dict(sd, strict=False)
         #     self.v = self.v.module.v
-
+    
 # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
         test_input = torch.randn(1, 1, input_fdim, input_tdim)
@@ -424,8 +426,6 @@ class ASTModel_finetune(nn.Module):
         self.original_embedding_dim = self.v.pos_embed.shape[2]
         self.cls_token_num = audio_model.module.cls_token_num
 
-        # mlp head for fine-tuning
-        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm)
 
         f_dim, t_dim = self.get_shape(fstride, tstride, input_fdim, input_tdim, fshape, tshape)
         # patch array dimension during pretraining
@@ -464,6 +464,13 @@ class ASTModel_finetune(nn.Module):
         new_pos_embed = new_pos_embed.reshape(1, self.original_embedding_dim, num_patches).transpose(1, 2)
         self.v.pos_embed = nn.Parameter(torch.cat([self.v.pos_embed[:, :self.cls_token_num, :].detach(), new_pos_embed], dim=1))
 
+        ############ ADDITIONS ######
+        self.v_list = [k[0] for k in self.v.named_parameters()] #list of layer_names in base model
+
+        # mlp head for fine-tuning
+        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm)
+        self.mlp_list = [f'head.{k}' for k in self.mlp_head.key] #list of layer names in classification head
+
         if freeze:
             for param in self.v.parameters():
                 param.requires_grad = False
@@ -471,7 +478,6 @@ class ASTModel_finetune(nn.Module):
         #for embedding extraction
         self.pooling_mode = pooling_mode
 
-    
     # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
         test_input = torch.randn(1, 1, input_fdim, input_tdim)
@@ -560,7 +566,7 @@ class ASTModel_finetune(nn.Module):
             return _hook
         
         if embedding_type == 'ft':
-            self.mlp_head.head.dense.register_forward_hook(_get_activation('embeddings'))
+            self.mlp_head.dense.register_forward_hook(_get_activation('embeddings'))
             
             logits = self.forward(x)
             e = activation['embeddings']

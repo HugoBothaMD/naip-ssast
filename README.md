@@ -13,7 +13,7 @@ The command line usable, start-to-finish implementation for Mayo speech data is 
 ## Known errors
 Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
 1. If you pass any value above 0 for `num_workers`, you will get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
-2. Mixup is not yet supported, weighted averaging hasn't been debugged.
+2. Original implementations not debugged to be compatible with new classification head <- maybe stick the old classification head back in>. Weighted averaging hasn't been debugged.
 3. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
 
 ## Running requirements

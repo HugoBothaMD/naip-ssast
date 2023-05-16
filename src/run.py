@@ -39,7 +39,6 @@ from torch.utils.data import WeightedRandomSampler
 #local
 from dataloader_mayo import AudioDataset
 from models import ASTModel_pretrain, ASTModel_finetune
-from traintest_mayo import *
 from traintest_mask_mayo import *
 from utilities import collate_fn
 
@@ -186,6 +185,17 @@ def load_data(data_split_root, exp_dir, cloud, cloud_dir, bucket):
     return train_df, val_df, test_df
 
 # model loops
+def pretrain_train_loop(args, model, dataloader_train, dataloader_val = None):
+    """
+    Training loop for finetuning SSAST 
+    :param args: dict with all the argument values
+    :param model: SSAST model
+    :param dataloader_train: dataloader object with training data
+    :param dataloader_val: dataloader object with validation data
+    :return model: fine-tuned SSAST model
+    """
+    print('Pretraining start')
+
 def finetune_train_loop(args, model, dataloader_train, dataloader_val = None):
     """
     Training loop for finetuning SSAST 
@@ -195,7 +205,7 @@ def finetune_train_loop(args, model, dataloader_train, dataloader_val = None):
     :param dataloader_val: dataloader object with validation data
     :return model: fine-tuned SSAST model
     """
-    print('Training start')
+    print('Finetuning start')
     #send to gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -273,6 +283,7 @@ def finetune_train_loop(args, model, dataloader_train, dataloader_val = None):
                 json.dump(json_string, outfile)
             
             #SAVE CURRENT MODEL
+            print(f'Saving epoch {e}')
             mdl_path = os.path.join(args.exp_dir, 'ast_mdl_epoch{}.pt'.format(e))
             torch.save(model.state_dict(), mdl_path)
             
@@ -281,13 +292,14 @@ def finetune_train_loop(args, model, dataloader_train, dataloader_val = None):
                 #upload_from_memory(model.state_dict(), args.cloud_dir, mdl_path, args.bucket)
                 upload(args.cloud_dir, mdl_path, args.bucket)
 
-    print('Training finished')
+    print('Saving final model')
     mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
     torch.save(model.state_dict(), mdl_path)
 
     if args.cloud:
         upload(args.cloud_dir, mdl_path, args.bucket)
 
+    print('Training finished')
     return model
 
 def val_loop(model, criterion, dataloader_val):
@@ -477,18 +489,11 @@ def train_ssast(args):
         return ast_mdl
     else:
         print('Now starting fine-tuning for {:d} epochs'.format(args.epochs))
-        if not args.original_fn:
-            ast_mdl = finetune_train_loop(args, ast_mdl, train_loader, val_loader)
-        else:
-            ast_mdl = train(args=args, audio_model=ast_mdl, train_loader=train_loader, val_loader=val_loader)
+        ast_mdl = finetune_train_loop(args, ast_mdl, train_loader, val_loader)
     
     #(8) evaluation:
-    if not args.original_fn:
-        preds, targets = eval_loop(ast_mdl, eval_loader, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+    preds, targets = eval_loop(ast_mdl, eval_loader, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
         #aucs = metrics(args, preds, targets)
-    else:
-        evaluation(args=args, audio_model=ast_mdl, eval_loader=eval_loader, val_loader=None) #TODO: does this need val dataloader????
-    
 
 def eval_only(args):
     """
@@ -535,12 +540,8 @@ def eval_only(args):
     else:
         print(f'Evaluating only a pretrained model: {args.pretrained_mdl_path}')
 
-    if not args.original_fn:
-        preds, targets = eval_loop(ast_mdl, eval_loader, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+    preds, targets = eval_loop(ast_mdl, eval_loader, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
         #aucs = metrics(args, preds, targets)
-    else:
-        evaluation(args=args, audio_model=ast_mdl, eval_loader=eval_loader, val_loader=None) #TODO: does this need val dataloader????
-
 
 def get_embeddings(args):
     """
@@ -620,7 +621,7 @@ def main():
     #Inputs
     parser.add_argument('-i','--prefix',default='speech_ai/speech_lake/', help='Input directory or location in google cloud storage bucket containing files to load')
     parser.add_argument("-s", "--study", choices = ['r01_prelim','speech_poc_freeze_1', None], default='speech_poc_freeze_1', help="specify study name")
-    parser.add_argument("-d", "--data_split_root", default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620/test.csv', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation and embedding expects a single .csv file.")
+    parser.add_argument("-d", "--data_split_root", default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation and embedding expects a single .csv file.")
     parser.add_argument('-l','--label_txt', default='/Users/m144443/Documents/GitHub/mayo-ssast/src/labels.txt')
     parser.add_argument('--lib', default=False, type=bool, help="Specify whether to load using librosa as compared to torch audio")
     #GCS
@@ -629,14 +630,15 @@ def main():
     parser.add_argument('--cloud', default=False, type=bool, help="Specify whether to save everything to cloud")
     #output
     parser.add_argument("--dataset", default=None,type=str, help="When saving, the dataset arg is used to set file names. If you do not specify, it will assume the lowest directory from data_split_root")
-    parser.add_argument("-o", "--exp_dir", default="./experiments2", help='specify LOCAL output directory')
-    parser.add_argument('--cloud_dir', default='m144443/temp_out/ssast2', type=str, help="if saving to the cloud, you can specify a specific place to save to in the CLOUD bucket")
+    parser.add_argument("-o", "--exp_dir", default="./experiments_orig", help='specify LOCAL output directory')
+    parser.add_argument('--cloud_dir', default='m144443/temp_out/ssast_orig', type=str, help="if saving to the cloud, you can specify a specific place to save to in the CLOUD bucket")
     #Mode specific
-    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='extraction')
-    parser.add_argument("--finetuned_mdl_path", type=str, default='/Users/m144443/Documents/GitHub/mayo-ssast/experiments2/amr_subject_dedup_594_train_100_test_binarized_v20220620_base_13_adam_epoch1_ast_mdl.pt', help="if loading an already pre-trained/fine-tuned model")
+    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='train')
+    parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
+    parser.add_argument("--finetuned_mdl_path", type=str, default='/Users/m144443/Documents/GitHub/mayo-ssast/experiments/amr_subject_dedup_594_train_100_test_binarized_v20220620_base_13_adam_epoch1_ast_mdl.pt', help="if loading an already pre-trained/fine-tuned model")
     parser.add_argument("--pretrained_mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
     parser.add_argument("--freeze",type=bool, default=True, help="Specify whether to freeze original model before fine-tuning")
-    parser.add_argument('--original_fn', type=bool, default=False, help="specify whether to use the original SSAST functions")
+    parser.add_argument('--original_fn', type=bool, default=True, help="specify whether to use the original SSAST functions")
     parser.add_argument('--embedding_type', type=str, default='pt', help='specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)', choices=['ft','pt'])
     #Audio configuration parameters
     parser.add_argument("--dataset_mean", default=-4.2677393, type=float, help="the dataset mean, used for input normalization")
@@ -655,11 +657,10 @@ def main():
     parser.add_argument("--stretch", default=0, type=float, help="Specify p for audio stretching")
     parser.add_argument('--freqm', help='frequency mask max length', type=int, default=0)
     parser.add_argument('--timem', help='time mask max length', type=int, default=0)
-    parser.add_argument("--mixup", type=float, default=0, help="how many (0-1) samples need to be mixup during training")
+    parser.add_argument("--mixup", type=float, default=1, help="how many (0-1) samples need to be mixup during training")
     parser.add_argument("--noise", type=bool, default=False, help="specify if augment noise in finetuning")
     parser.add_argument("--skip_norm", type=bool, default=False, help="specify whether to skip normalization on spectrogram")
     #Model parameters
-    parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
     parser.add_argument("--fstride", type=int, default=128,help="soft split freq stride, overlap=patch_size-stride")
     parser.add_argument("--tstride", type=int, default=2, help="soft split time stride, overlap=patch_size-stride")
     parser.add_argument("--fshape", type=int, default=128,help="shape of patch on the frequency dimension")
@@ -675,21 +676,6 @@ def main():
     parser.add_argument('-lr', '--learning_rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
     parser.add_argument("--scheduler", type=str, default=None, help="specify lr scheduler", choices=["onecycle", None])
     parser.add_argument("--max_lr", type=float, default=0.01, help="specify max lr for lr scheduler")
-    #training parameters, original fn\
-    parser.add_argument('--warmup', help='if use warmup learning rate scheduler', type=ast.literal_eval, default='False')
-    parser.add_argument("--lr_patience", type=int, default=1, help="how many epoch to wait to reduce lr if mAP doesn't improve")
-    parser.add_argument('--adaptschedule', help='if use adaptive scheduler ', type=ast.literal_eval, default='False')
-    parser.add_argument("--n-print-steps", type=int, default=100, help="number of steps to print statistics")
-    parser.add_argument('--save_model', help='save the models or not', type=ast.literal_eval, default='True')
-    parser.add_argument("--head_lr", type=int, default=1, help="the factor of mlp-head_lr/lr, used in some fine-tuning experiments only")
-    #original finetuning
-    parser.add_argument("--lrscheduler_start", default=10, type=int, help="when to start decay in finetuning")
-    parser.add_argument("--lrscheduler_step", default=5, type=int, help="the number of step to decrease the learning rate in finetuning")
-    parser.add_argument("--lrscheduler_decay", default=0.5, type=float, help="the learning rate decay ratio in finetuning")
-    parser.add_argument("--wa", help='if do weight averaging in finetuning', type=ast.literal_eval, default='False')
-    parser.add_argument("--wa_start", type=int, default=16, help="which epoch to start weight averaging in finetuning")
-    parser.add_argument("--wa_end", type=int, default=30, help="which epoch to end weight averaging in finetuning")
-    parser.add_argument("--metrics", type=str, default="mAP", help="the main evaluation metrics for validation in finetuning", choices=["mAP", "acc"])
     #original pretraining
     parser.add_argument('--mask_patch', help='how many patches to mask (used only for ssl pretraining)', type=int, default=400)
     parser.add_argument("--cluster_factor", type=int, default=3, help="mask clutering factor")
@@ -697,7 +683,7 @@ def main():
     #classification head parameters
     parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
     parser.add_argument("--final_dropout", type=float, default=0.25, help="specify dropout probability for final dropout layer in classification head")
-    parser.add_argument("--layernorm", type=bool, default=False, help="specify whether to include the LayerNorm in classification head")
+    parser.add_argument("--layernorm", type=bool, default=True, help="specify whether to include the LayerNorm in classification head")
     #OTHER
     parser.add_argument("--debug", default=True, type=bool)
     args = parser.parse_args()

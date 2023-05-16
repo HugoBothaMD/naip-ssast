@@ -248,7 +248,7 @@ class AudioDataset(Dataset):
             sample= mix(sample, None)
 
         elif random.random() < self.mixup: 
-            mix_sample_idx = random.randint(0, len(self.annotations_df))
+            mix_sample_idx = random.randint(0, len(self.annotations_df)-1)
             mix_uid = self.annotations_df.index[mix_sample_idx]
             mix_targets = self.annotations_df[self.target_labels].iloc[mix_sample_idx].values
         

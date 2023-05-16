@@ -62,11 +62,11 @@ class ClassificationHead(nn.Module):
 
         classifier = []
         key = []
+        classifier.append(nn.Linear(self.input_size, self.input_size) )
+        key.append('dense')
         if self.layernorm:
             classifier.append(nn.LayerNorm(self.input_size))
             key.append('norm')
-        classifier.append(nn.Linear(self.input_size, self.input_size) )
-        key.append('dense')
         if self.activation == 'relu':
             classifier.append(nn.ReLU())
             key.append('relu')
@@ -74,12 +74,15 @@ class ClassificationHead(nn.Module):
         key.append('dropout')
         classifier.append(nn.Linear(self.input_size, self.output_size))
         key.append('outproj')
+        self.classifier=classifier
+        self.key=key
 
         seq = []
         for i in range(len(classifier)):
             seq.append((key[i],classifier[i]))
         
         self.head = nn.Sequential(OrderedDict(seq))
+
 
     def forward(self, x, **kwargs):
         """
@@ -205,7 +208,7 @@ def load_waveform_local(input_dir, uid, extension = None, lib=False):
     metadata = json.loads(metadata_path)
     
     if extension is None:
-        if metadata['encoding'.lower()] == 'MP3':
+        if metadata['encoding'] == 'MP3':
             extension = 'mp3'
         else:
             extension = 'wav'
@@ -480,7 +483,7 @@ class Mixup(object):
             waveform2 = waveform2 - waveform2.mean()
 
             if waveform1.shape[1] != waveform2.shape[1]:
-                if waveform1.shape[1] > waveform2.shape[2]:
+                if waveform1.shape[1] > waveform2.shape[1]:
                     temp_wav = torch.zeros(1, waveform1.shape[1])
                     temp_wav[0,0:waveform2.shape[1]] = waveform2
                     waveform2 = temp_wav
