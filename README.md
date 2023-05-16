@@ -129,6 +129,10 @@ You do not need to worry about `--fstride, --tstride, --fshape, --tshape`. The d
 ### Original fn parameters
 Other parameters for the original function may be altered. We do not list them here. Run `python run.py -h` for more information.
 
+### Classification Head parameters
+* `--activation`: specify activation function to use for classification head
+* `--final_dropout`: specify dropout probability for final dropout layer in classification head
+* `--layernorm`: specify whether to include the LayerNorm in classification head
 
 ## New traintest function
 We slightly altered the original train/validation functions for fine-tuning and pre-training. The new versions are available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py) for fine-tuning and [traintest_mask_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mask_mayo.py) for pre-training. 

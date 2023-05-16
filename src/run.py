@@ -98,7 +98,7 @@ def load_args(args):
     :return model_args: dict with all the argument values from the finetuned model
     '''
     # assumes that the model is saved in the same folder as an args.pkl file 
-    folder = os.path.basename(os.path.dirname(args.finetuned_mdl_path))
+    folder = os.path.dirname(args.finetuned_mdl_path)
 
     if os.path.exists(os.path.join(folder, 'model_args.pkl')): #if downloaded from gcs into the exp dir, it should be saved under mdl_args.pkl to make sure it doesn't overwrite the args.pkl
         with open(os.path.join(folder, 'model_args.pkl'), 'rb') as f:
@@ -462,7 +462,7 @@ def train_ssast(args):
                                     fstride=args.fstride, tstride=args.tstride,
                                     input_fdim=args.num_mel_bins, input_tdim=args.target_length, 
                                     model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path, 
-                                    activation='relu', final_dropout=0.2, layernorm=True, freeze=args.freeze, pooling_mode=args.pooling_mode)
+                                    activation=args.activation, final_dropout=args.final_dropout, layernorm=args.layernorm, freeze=args.freeze, pooling_mode=args.pooling_mode)
 
 
         model_parameters = filter(lambda p: p.requires_grad, ast_mdl.parameters())
@@ -526,7 +526,7 @@ def eval_only(args):
                                 fstride=model_args.fstride, tstride=model_args.tstride,
                                 input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
                                 model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path,
-                                activation='relu', final_dropout=0.2, layernorm=True, freeze=model_args.freeze, pooling_mode=model_args.pooling_mode)
+                                activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, freeze=model_args.freeze, pooling_mode=model_args.pooling_mode)
     
     if args.finetuned_mdl_path is not None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -576,7 +576,7 @@ def get_embeddings(args):
                                 fstride=model_args.fstride, tstride=model_args.tstride,
                                 input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
                                 model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path,
-                                activation='relu', final_dropout=0.2, layernorm=True, freeze=model_args.freeze, pooling_mode=model_args.pooling_mode)
+                                activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, freeze=model_args.freeze, pooling_mode=model_args.pooling_mode)
     
     if args.finetuned_mdl_path is not None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -675,7 +675,7 @@ def main():
     parser.add_argument('-lr', '--learning_rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
     parser.add_argument("--scheduler", type=str, default=None, help="specify lr scheduler", choices=["onecycle", None])
     parser.add_argument("--max_lr", type=float, default=0.01, help="specify max lr for lr scheduler")
-    #training parameters, original fn
+    #training parameters, original fn\
     parser.add_argument('--warmup', help='if use warmup learning rate scheduler', type=ast.literal_eval, default='False')
     parser.add_argument("--lr_patience", type=int, default=1, help="how many epoch to wait to reduce lr if mAP doesn't improve")
     parser.add_argument('--adaptschedule', help='if use adaptive scheduler ', type=ast.literal_eval, default='False')
@@ -694,6 +694,10 @@ def main():
     parser.add_argument('--mask_patch', help='how many patches to mask (used only for ssl pretraining)', type=int, default=400)
     parser.add_argument("--cluster_factor", type=int, default=3, help="mask clutering factor")
     parser.add_argument("--epoch_iter", type=int, default=2000, help="for pretraining, how many iterations to verify and save models")
+    #classification head parameters
+    parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
+    parser.add_argument("--final_dropout", type=float, default=0.25, help="specify dropout probability for final dropout layer in classification head")
+    parser.add_argument("--layernorm", type=bool, default=False, help="specify whether to include the LayerNorm in classification head")
     #OTHER
     parser.add_argument("--debug", default=True, type=bool)
     args = parser.parse_args()

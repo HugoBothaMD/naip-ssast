@@ -79,7 +79,7 @@ class AudioDataset(Dataset):
         self.timem = self.audio_conf.get('timem') #time masking if timem != 0
         print('now using following mask: {:d} freq, {:d} time'.format(self.audio_conf.get('freqm'), self.audio_conf.get('timem')))
         print('MIXUP NOT CURRENTLY AVAILABLE')
-        # self.mixup = self.audio_conf.get('mixup') #mixup if mixup != 0
+        self.mixup = self.audio_conf.get('mixup') #mixup if mixup != 0
         # print('now using mix-up with rate {:f}'.format(self.mixup))
         
         ## dataset spectrogram mean and std, used to normalize the input
@@ -140,9 +140,6 @@ class AudioDataset(Dataset):
 
         tensor_tfm = ToTensor()
         transform_list.append(tensor_tfm)
-        wavmean = WaveMean()
-        transform_list.append(wavmean)
-
         transform = torchvision.transforms.Compose(transform_list)
 
         #albumentations transforms
@@ -228,7 +225,7 @@ class AudioDataset(Dataset):
         'targets': labels for current file as tensor
 
         '''
-        
+    
         #If not doing mix-up
         if torch.is_tensor(idx):
             idx = idx.tolist()
@@ -244,6 +241,29 @@ class AudioDataset(Dataset):
         sample = self.audio_transform(sample) #load and perform standard transformation
         if self.al_transform != []:
             sample = self.al_transform(sample) #audio augmentations
+        
+        #TODO: initialize mixup
+        mix = Mixup()
+        if self.mixup == 0:
+            sample= mix(sample, None)
+
+        elif random.random() < self.mixup: 
+            mix_sample_idx = random.randint(0, len(self.annotations_df))
+            mix_uid = self.annotations_df.index[mix_sample_idx]
+            mix_targets = self.annotations_df[self.target_labels].iloc[mix_sample_idx].values
+        
+            sample2 = {
+                'uid': mix_uid,
+                'targets': mix_targets
+            }
+            sample2 = self.audio_transform(sample2) #load and perform standard transformation
+            if self.al_transform != []:
+                sample2 = self.al_transform(sample2) #audio augmentations
+
+            sample = mix(sample, sample2)
+        
+        else:
+            sample = mix(sample, None)
 
         sample = self.spec_transform(sample) #convert to spectrogram and perform transformations
 

@@ -47,8 +47,11 @@ class ClassificationHead(nn.Module):
         """
         Create a classification head with a dense layer, relu activation, a dropout layer, and final classification layer
         :param hiden_size: size of input to classification head - equivalent to the last hidden layer size in the Wav2Vec 2.0 model (int)
-        :param final_dropout: specify amount of dropout
+        :param output_size: number of categories for classification output
         :param num_labels: specify number of categories to classify
+        :param activation: activation function for classification head
+        :param final_dropout: amount of dropout to use in classification head
+        :param layernorm: include layer normalization in classification head
         """
         super().__init__()
         self.input_size = input_size
@@ -57,25 +60,19 @@ class ClassificationHead(nn.Module):
         self.layernorm = layernorm
         self.final_dropout = final_dropout
 
-        self.norm = nn.LayerNorm(self.input_size)
-        self.dense = nn.Linear(self.input_size, self.input_size) 
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(self.final_dropout)
-        self.out_proj = nn.Linear(self.input_size, self.output_size)
-
         classifier = []
         key = []
         if self.layernorm:
-            classifier.append(self.norm)
+            classifier.append(nn.LayerNorm(self.input_size))
             key.append('norm')
-        classifier.append(self.dense)
+        classifier.append(nn.Linear(self.input_size, self.input_size) )
         key.append('dense')
         if self.activation == 'relu':
-            classifier.append(self.relu)
+            classifier.append(nn.ReLU())
             key.append('relu')
-        classifier.append(self.dropout)
+        classifier.append(nn.Dropout(self.final_dropout))
         key.append('dropout')
-        classifier.append(self.out_proj)
+        classifier.append(nn.Linear(self.input_size, self.output_size))
         key.append('outproj')
 
         seq = []
@@ -91,6 +88,7 @@ class ClassificationHead(nn.Module):
         :return x: classifier output
         """
         return self.head(x)
+
 
 #overrid collate function to stack images differently
 def collate_fn(batch):
@@ -207,7 +205,7 @@ def load_waveform_local(input_dir, uid, extension = None, lib=False):
     metadata = json.loads(metadata_path)
     
     if extension is None:
-        if metadata['encoding'] == 'MP3':
+        if metadata['encoding'.lower()] == 'MP3':
             extension = 'mp3'
         else:
             extension = 'wav'
@@ -464,6 +462,45 @@ class WaveMean(object):
         waveform = waveform - waveform.mean()
         sample['waveform'] = waveform
         
+        return sample
+    
+class Mixup(object):
+    '''
+    Implement mixup of two files
+    '''
+
+    def __call__(self, sample, sample2=None):
+        if sample2 is None:
+            waveform = sample['waveform']
+            waveform = waveform - waveform.mean()
+        else:
+            waveform1 = sample['waveform']
+            waveform2 = sample2['waveform']
+            waveform1 = waveform1 - waveform1.mean()
+            waveform2 = waveform2 - waveform2.mean()
+
+            if waveform1.shape[1] != waveform2.shape[1]:
+                if waveform1.shape[1] > waveform2.shape[2]:
+                    temp_wav = torch.zeros(1, waveform1.shape[1])
+                    temp_wav[0,0:waveform2.shape[1]] = waveform2
+                    waveform2 = temp_wav
+                else:
+                    waveform2 = waveform2[0,0:waveform1.shape[1]]
+
+            #sample lambda from beta distribution
+            mix_lambda = np.random.beta(10,10)
+
+            mix_waveform = mix_lambda*waveform1 + (1 - mix_lambda) * waveform2
+            waveform = mix_waveform - mix_waveform.mean()   
+
+            targets1 = sample['targets']
+            targets2 = sample2['targets']
+            targets = mix_lambda*targets1 + (1-mix_lambda)*targets2
+            sample['targets'] = targets
+            #TODO: what is happening here
+
+        sample['waveform'] = waveform
+
         return sample
 
 ### FROM DATALOADER_GCS
@@ -737,3 +774,7 @@ class Wav2Fbank(object):
         if self.override_wave:
             del sample['waveform']
         return sample
+    
+
+
+
