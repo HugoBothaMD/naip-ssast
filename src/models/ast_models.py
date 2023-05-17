@@ -515,7 +515,7 @@ class ASTModel_finetune(nn.Module):
 
         return x, hidden_states
 
-    def finetuningavgtok(self, x):
+    def finetuningavgtok(self, x,hidden_states):
         # average output of all tokens except cls token(s)
         if self.hidden_method=="final":
             x = torch.mean(x[:, self.cls_token_num:, :], dim=1)
@@ -535,7 +535,7 @@ class ASTModel_finetune(nn.Module):
                 "Hidden method must be one of ['final', 'weighted']")
         return x
 
-    def finetuningcls(self, x):
+    def finetuningcls(self, x,hidden_states):
         # if models has two cls tokens (DEIT), average as the clip-level representation
         if self.hidden_method=="final":
             # if models has two cls tokens (DEIT), average as the clip-level representation
