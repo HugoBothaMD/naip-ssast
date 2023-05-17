@@ -140,6 +140,9 @@ We slightly altered the original train/validation functions for fine-tuning and 
 ## Embeddings
 Embedding extraction is now a function within `ASTModel_finetun` model (see `extract_embeddings(...)` in [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py)). Notably, this function contains options to extract either the output of the Dense layer from the classification head or the final hidden layer of the base SSAST model by specifying `embedding_type` as either `ft` for 'finetuned' embedding (extracting from classification head) or `pt` for 'pretrained' embedding (extracting from hidden states), on the basis that we generally freeze the model before finetuning. Note that you must indicate a merging strategy for `pt` type embedding extraction to pool the hidden state. This is defaulted to `mean`. It can be set at model initialization or as a parameter in the command line `-pm, --pooling_mode`.
 
+## Training
+This function can pretrain the base SSAST if used with `--task` as one of 'pretrain_mpc', 'pretrain_mpg', 'pretrain_joint'.
+
 ## Visualize Attention
 Not yet implemented. 
 
