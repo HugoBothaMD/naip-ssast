@@ -382,7 +382,8 @@ class ASTModel_finetune(nn.Module):
     def __init__(self, task='ft_cls',label_dim=527,
                  fshape=128, tshape=2, fstride=128, tstride=2,
                  input_fdim=128, input_tdim=1024, model_size='base',load_pretrained_mdl_path=None,
-                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True, pooling_mode='mean'):
+                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True, pooling_mode='mean',
+                 hidden_method='final'):
 
         super(ASTModel_finetune, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
@@ -467,6 +468,13 @@ class ASTModel_finetune(nn.Module):
         ############ ADDITIONS ######
         self.v_list = [k[0] for k in self.v.named_parameters()] #list of layer_names in base model
 
+        self.hidden_method=hidden_method
+
+        if self.hidden_method=="weighted":
+            self.weightsum=nn.Parameter(torch.ones(13)/13) ## this is hard coded for DeiT currently, but could be changed for other models
+        else:
+            self.weightsum=torch.ones(13)/13
+        
         # mlp head for fine-tuning
         self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm)
         self.mlp_list = [f'head.{k}' for k in self.mlp_head.key] #list of layer names in classification head
@@ -477,6 +485,8 @@ class ASTModel_finetune(nn.Module):
 
         #for embedding extraction
         self.pooling_mode = pooling_mode
+
+        
 
     # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
@@ -500,25 +510,58 @@ class ASTModel_finetune(nn.Module):
         x = x + self.v.pos_embed
         x = self.v.pos_drop(x)
 
+        hidden_states=[]
+        hidden_states.append(x)
+
         for blk_id, blk in enumerate(self.v.blocks):
             x = blk(x)
+            hidden_states.append(x)
         x = self.v.norm(x)
 
-        return x
+        return x, hidden_states
 
-    def finetuningavgtok(self, x):
+    def finetuningavgtok(self, x,hidden_states, weightsum):
         # average output of all tokens except cls token(s)
-        x = torch.mean(x[:, self.cls_token_num:, :], dim=1)
-        x = self.mlp_head(x)
+        if self.hidden_method=="final":
+            x = torch.mean(x[:, self.cls_token_num:, :], dim=1)
+            x = self.mlp_head(x)
+        elif self.hidden_method=="weighted":
+            hidden_stack=torch.stack(hidden_states)
+            hidden_stack=hidden_stack[:, :,self.cls_token_num:, :]
+            hidden_stack=hidden_stack.mean(dim=2)
+            hidden_stack=torch.permute(hidden_stack, (1,0,2)) # batch x layer x token
+            w_sum=torch.reshape(weightsum, (1,1,13))
+            w_sum=w_sum.repeat(hidden_stack.shape[0],1,1)
+            weighted_sum=torch.bmm(w_sum, hidden_stack)
+            weighted_sum=weighted_sum.view(hidden_stack.shape[0],768) # should probably not hardcode 768 but instead use hidden size
+            x = self.mlp_head(weighted_sum)
+        else: 
+            raise Exception(
+                "Hidden method must be one of ['final', 'weighted']")
         return x
 
-    def finetuningcls(self, x):
+    def finetuningcls(self, x,hidden_states, weightsum):
         # if models has two cls tokens (DEIT), average as the clip-level representation
-        if self.cls_token_num == 2:
-            x = (x[:, 0] + x[:, 1]) / 2
-        else:
-            x = x[:, 0]
-        x = self.mlp_head(x)
+        if self.hidden_method=="final":
+            # if models has two cls tokens (DEIT), average as the clip-level representation
+            if self.cls_token_num == 2:
+                x = (x[:, 0] + x[:, 1]) / 2
+            else:
+                x = x[:, 0]
+            x = self.mlp_head(x)
+        elif self.hidden_method=="weighted":
+            hidden_stack=torch.stack(hidden_states)
+            hidden_stack=hidden_stack[:, :,0:self.cls_token_num:, :]
+            hidden_stack=hidden_stack.mean(dim=2)
+            hidden_stack=torch.permute(hidden_stack, (1,0,2)) # batch x layer x token
+            w_sum=torch.reshape(weightsum, (1,1,13))
+            w_sum=w_sum.repeat(hidden_stack.shape[0],1,1)
+            weighted_sum=torch.bmm(w_sum, hidden_stack)
+            weighted_sum=weighted_sum.view(hidden_stack.shape[0],768) # should probably not hardcode 768 but instead use hidden size
+            x = self.mlp_head(weighted_sum)
+        else: 
+            raise Exception(
+                "Hidden method must be one of ['final', 'weighted']")
         return x
 
     def forward(self, x):
@@ -526,8 +569,8 @@ class ASTModel_finetune(nn.Module):
         x = x.unsqueeze(1)
         x = x.transpose(2, 3)
 
-        x = self.base_model(x)
-        return self.finetuningtask(x)
+        x, hidden_states = self.base_model(x)
+        return self.finetuningtask(x,hidden_states, self.weightsum)
     
     def merged_strategy(
             self,
