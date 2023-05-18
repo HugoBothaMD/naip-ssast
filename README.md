@@ -6,7 +6,7 @@ can be downloaded from the github to use for finetuning. The major changes are t
 2. We added a new classification head with a Dense layer, ReLU activation, LayerNorm, dropout, and a final linear projection layer (this class is defined as `ClassificationHead` in [speech_utils.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/utilities/speech_utils.py))
 3. We added options for freezing the base SSAST model in the finetune class.
 4. We added an embedding extraction function to the finetune model class.
-5. While compatible with old finetuning functions, we also added our training/validation/evaluation loops as well as a loop for embedding extraction. 
+5. We added our training/validation/evaluation loops as well as a loop for embedding extraction. It is no longer compatible with old training/evaluation functions.
 
 The command line usable, start-to-finish implementation for Mayo speech data is available with [run.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/run.py). A notebook tutorial version is also available at [run.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run.ipynb). This implementation now has options for pre-training a ssast model, fine-tuning a ssast model, evaluating a saved model, or extracting embeddings.
 
