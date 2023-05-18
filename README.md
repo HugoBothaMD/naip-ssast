@@ -134,6 +134,8 @@ Other parameters for the original function may be altered. We do not list them h
 * `--final_dropout`: specify dropout probability for final dropout layer in classification head
 * `--layernorm`: specify whether to include the LayerNorm in classification head
 
+For more information on arguments, you can also run `python run.py -h`. 
+
 ## Functionality
 This implementation contains many functionality options as listed below:
 

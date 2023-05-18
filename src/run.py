@@ -20,8 +20,6 @@ File: run.py
 #IMPORTS
 #built-in
 import argparse
-import ast
-import json
 import os
 import pickle
 
@@ -29,12 +27,10 @@ import pickle
 import numpy as np
 import pandas as pd
 import torch
-from tqdm import tqdm
 import pyarrow
 
-from google.cloud import storage, bigquery
-from sklearn.metrics import roc_auc_score, roc_curve
-from torch.utils.data import WeightedRandomSampler
+from google.cloud import storage
+
 
 #local
 from dataloader import AudioDataset
