@@ -163,7 +163,7 @@ If you have a finetuned model and want to evaluate it on a new data set, you can
 It is expected that there is an `args.pkl` file in the same directory as the finetuned model to indicate which arguments were used to initialize the finetuned model. This implementation will load the arguments and initialize/load the finetuned model with these arguments. If no such file exists, it will use the arguments from the current run, which could be incompatible if you are not careful. 
 
 
-## 4. Embedding extraction.
+### 4. Embedding extraction.
 We implemented multiple embedding extraction methods for use with the SSAST model. The implementation is a function within `ASTModel_finetune` called `extract_embedding(x, embedding_type, layer, task)`, which is called on batches instead of the forward function. 
 
 Embedding extraction is triggered by setting `-m, --mode` to 'extraction'. 
