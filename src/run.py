@@ -139,7 +139,12 @@ def train_ssast(args):
                            args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
 
         print('Saving final model')
-        mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+        if ast_mdl.weighted:
+            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_mdl_weighted.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+        else:
+            if args.layer==-1:
+                args.layer='Final'
+            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
         torch.save(ast_mdl.state_dict(), mdl_path)
 
         if args.cloud:
@@ -255,23 +260,16 @@ def get_embeddings(args):
         args.layer='NA'
     elif args.layer==-1:
         args.layer='Final'
+    
     try:
-        if args.finetuned_mdl_path is not None:
-            args.finetuned_mdl_path = args.finetuned_mdl_path.replace(os.path.commonprefix([args.dataset, os.path.basename(args.finetuned_mdl_path)]), '')
-            pqt_path = '{}/{}_{}_{}_layer{}_{}_ssast_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, os.path.basename(args.finetuned_mdl_path)[:-3], args.model_size, args.layer, args.task, args.embedding_type,)
-        else:
-            pqt_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type,)
+        pqt_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
         df_embed.to_parquet(path=pqt_path, index=True, engine='pyarrow') 
 
         if args.cloud:
             upload(args.cloud_dir, pqt_path, args.bucket)
     except:
         print('Unable to save as pqt, saving instead as csv')
-        if args.finetuned_mdl_path is not None:
-            args.finetuned_mdl_path = args.finetuned_mdl_path.replace(os.path.commonprefix([args.dataset, os.path.basename(args.finetuned_mdl_path)]), '')
-            csv_path = '{}/{}_{}_{}_layer{}_{}_ssast_{}_embeddings.csv'.format(args.exp_dir, args.dataset, os.path.basename(args.finetuned_mdl_path)[:-3], args.model_size, args.layer, args.task, args.embedding_type,)
-        else:
-            csv_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.csv'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type,)
+        csv_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.csv'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
         df_embed.to_csv(csv_path, index=True)
 
         if args.cloud:

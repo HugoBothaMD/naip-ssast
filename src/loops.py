@@ -208,7 +208,7 @@ def validation_mask(model, dataloader_val, task, cluster, mask_patch):
 
 def finetune(model, dataloader_train, dataloader_val = None, 
              optim='adamw', learning_rate=0.001, loss_fn='BCE',
-             scheduler='onecycle', max_lr=0.01,
+             sched='onecycle', max_lr=0.01,
              epochs=10, exp_dir='', cloud=False, cloud_dir='', bucket=None):
     """
     Training loop for finetuning SSAST 
@@ -218,7 +218,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
     :param optim: type of optimizer to initialize
     :param learning_rate: optimizer learning rate
     :param loss_fn: type of loss function to initialize
-    :param scheduler: type of scheduler to initialize
+    :param sched: type of scheduler to initialize
     :param max_lr: max learning rate for onecycle scheduler
     :param epochs: number of epochs to run pretraining
     :param exp_dir: output directory on local machine
@@ -246,7 +246,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
     else:
         raise ValueError(f'Given optimizer ({optim}) not supported. Must be either adam or adamw')
     
-    if scheduler == 'onecycle':
+    if sched == 'onecycle':
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=max_lr, steps_per_epoch=len(dataloader_train), epochs=epochs)
     else:
         scheduler = None
@@ -276,7 +276,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
                 lr = scheduler.get_last_lr()
             else:
                 lr = learning_rate
-            logs = {'epoch': e, 'optim':optim, 'loss_fn': loss_fn, 'lr': lr}
+            logs = {'epoch': e, 'optim':optim, 'loss_fn': loss_fn, 'lr': lr, 'scheduler':sched}
     
             logs['training_loss_list'] = training_loss
             training_loss = np.array(training_loss)

@@ -624,7 +624,7 @@ class ASTModel_finetune(nn.Module):
             logits = self.forward(x)  #run the forward function using model parameters for the task (so that it's inline with the finetuning)
             e = activation['embeddings'] #get embedding
         
-        ## EMBEDDING 'pt': extract from a hidden state
+        ## EMBEDDING 'pt': extract from a hidden state, 'wt': extract after matmul with layer weights
         elif embedding_type == 'pt' or embedding_type == 'wt':
             x = x.unsqueeze(1) #(batch_size, 1, time_fram_num, frequency_bins), e.g. (12, 1, 1024, 128)
             x = x.transpose(2, 3) #(batch_size, 1, frequency_bines, time_frame_num) e.g. (12, 1, 128, 1024)
