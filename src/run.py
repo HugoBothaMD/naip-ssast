@@ -165,7 +165,8 @@ def eval_only(args):
         train_df, val_df, test_df = load_data(args.data_split_root, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
     else:
         test_df = pd.read_csv(args.data_split_root, index_col = 'uid')
-        test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
+        if 'distortions' not in test_df.columns:
+            test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
 
     if args.debug:
         test_df = test_df.iloc[0:8,:]
@@ -213,7 +214,8 @@ def get_embeddings(args):
     # (1) load data to get embeddings for
     assert '.csv' in args.data_split_root, f'A csv file is necessary for embedding extraction. Please make sure this is a full file path: {args.data_split_root}'
     annotations_df = pd.read_csv(args.data_split_root, index_col = 'uid')
-    annotations_df["distortions"]=((annotations_df["distorted Cs"]+annotations_df["distorted V"])>0).astype(int)
+    if 'distortions' not in annotations_df.columns:
+        annotations_df["distortions"]=((annotations_df["distorted Cs"]+annotations_df["distorted V"])>0).astype(int)
 
     if args.debug:
         annotations_df = annotations_df.iloc[0:8,:]
@@ -378,10 +380,16 @@ def main():
         os.makedirs(args.exp_dir)
     
     # (6) check if PRETRAINED MDL is stored in gcs bucket
-    if args.pretrained_mdl_path[:5] =='gs://':
-        pretrained_mdl_path = args.pretrained_mdl_path[5:].replace(args.bucket_name,'')[1:]
-        pretrained_mdl_path = download_model(pretrained_mdl_path, args.exp_dir, bucket)
-        args.pretrained_mdl_path = pretrained_mdl_path
+    if args.pretrained_mdl_path is None:
+        assert args.mode=='train' and 'pretrain' in args.task, 'Must give pretrained model path if not pretraining'
+    else:
+        if args.pretrained_mdl_path[:5] =='gs://':
+            pretrained_mdl_path = args.pretrained_mdl_path[5:].replace(args.bucket_name,'')[1:]
+            pretrained_mdl_path = download_model(pretrained_mdl_path, args.exp_dir, bucket)
+            args.pretrained_mdl_path = pretrained_mdl_path
+        else:
+            assert os.path.exists(args.pretrained_mdl_path), 'Current checkpoint does not exist on local machine'
+
     
     # (7) dump arguments
     args_path = "%s/args.pkl" % args.exp_dir
