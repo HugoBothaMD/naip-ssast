@@ -37,7 +37,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from torch.utils.data import WeightedRandomSampler
 
 #local
-from dataloader_mayo import AudioDataset
+from dataloader import AudioDataset
 from models import ASTModel_pretrain, ASTModel_finetune
 from utilities import *
 from loops import *

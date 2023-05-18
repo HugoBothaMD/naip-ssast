@@ -1,13 +1,5 @@
-breathy
-loudness decay
 slow rate
-high pitch
-hoarse / harsh
 irregular artic breakdowns
 rapid rate
-reduced OA loudness
-abn pitch variability
-strained
-hypernasal
-abn loudness variability
 distortions
+strained
