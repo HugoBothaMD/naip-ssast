@@ -5,7 +5,5 @@
 # @Email   : yuangong@mit.edu
 # @File    : __init__.py
 
-from .util import *
-from .stats import *
 from .speech_utils import *
 from .load_utils import *

@@ -50,17 +50,17 @@ def pretrain(model, dataloader_train, dataloader_val = None,
     #send to gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
-    #loss
+
     #optimizer
     if optim == 'adam':
-        optim = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
+        optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
     elif optim == 'adamw':
-         optim = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
+         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
     else:
         raise ValueError(f'Given optimizer ({optim}) not supported.')
     
     if scheduler == 'onecycle':
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optim, max_lr=max_lr, steps_per_epoch=len(dataloader_train), epochs=epochs)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=max_lr, steps_per_epoch=len(dataloader_train), epochs=epochs)
     else:
         scheduler = None
 
@@ -74,7 +74,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
             x = batch['fbank']
             targets = batch['targets']
             x, targets = x.to(device), targets.to(device)
-            optim.zero_grad()
+            optimizer.zero_grad()
         
             if task == 'pretrain_mpc':
                 acc, loss = model(x, task, mask_patch=mask_patch, cluster=cluster)
@@ -96,7 +96,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
                 loss = loss1 + 10 * loss2
 
             loss.backward()
-            optim.step()
+            optimizer.step()
             if scheduler is not None:
                 scheduler.step()
 
@@ -109,7 +109,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
                 lr = scheduler.get_last_lr()
             else:
                 lr = learning_rate
-            logs = {'epoch': e, 'optim':optim, 'loss_fn': loss, 'lr': lr}
+            logs = {'epoch': e, 'optim':optim, 'lr': lr}
 
             logs['training_loss_list'] = training_loss
             training_loss = np.array(training_loss)
@@ -155,7 +155,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
             torch.save(model.state_dict(), mdl_path)
 
             optim_path = os.path.join(exp_dir, 'ast_optim_pt_epoch{}.pt'.format(e))
-            torch.save(optim.state_dict(), optim_path)
+            torch.save(optimizer.state_dict(), optim_path)
             
             if cloud:
                 upload(cloud_dir, logs_path, bucket)
@@ -240,14 +240,14 @@ def finetune(model, dataloader_train, dataloader_val = None,
         raise ValueError(f'Given loss function ({loss_fn}) not supported. Must be either MSE or BCE')
     #optimizer
     if optim == 'adam':
-        optim = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
+        optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
     elif optim == 'adamw':
-         optim = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
+         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
     else:
         raise ValueError(f'Given optimizer ({optim}) not supported. Must be either adam or adamw')
     
     if scheduler == 'onecycle':
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optim, max_lr=max_lr, steps_per_epoch=len(dataloader_train), epochs=epochs)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=max_lr, steps_per_epoch=len(dataloader_train), epochs=epochs)
     else:
         scheduler = None
     
@@ -260,11 +260,11 @@ def finetune(model, dataloader_train, dataloader_val = None,
             x = batch['fbank']
             targets = batch['targets']
             x, targets = x.to(device), targets.to(device)
-            optim.zero_grad()
+            optimizer.zero_grad()
             o = model(x)
             loss = criterion(o, targets)
             loss.backward()
-            optim.step()
+            optimizer.step()
             if scheduler is not None:
                 scheduler.step()
             loss_item = loss.item()
@@ -310,7 +310,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
             torch.save(model.state_dict(), mdl_path)
             
             optim_path = os.path.join(exp_dir, 'ast_ft_optim_epoch{}.pt'.format(e))
-            torch.save(optim.state_dict(), optim_path)
+            torch.save(optimizer.state_dict(), optim_path)
 
             if cloud:
                 upload(cloud_dir, logs_path, bucket)
