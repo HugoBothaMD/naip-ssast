@@ -162,7 +162,6 @@ class ASTModel_pretrain(nn.Module):
         self.v.pos_embed = new_pos_embed
         trunc_normal_(self.v.pos_embed, std=.02)
 
-        self.v_list = [k[0] for k in self.v.named_parameters()] #list of layer_names in base model
 
         #TODO: fix
         # if load_pretrained_mdl_path != None:
@@ -472,7 +471,7 @@ class ASTModel_finetune(nn.Module):
 
         self.weighted = weighted #specification for running weight sum finetuning, where we generate a weight for each layer to contribute to the classification
 
-        self.n_states = audio_model.heads + 1
+        self.n_states = len(self.v.blocks) + 1
         if self.weighted:
             self.weightsum=nn.Parameter(torch.ones(self.n_states)/self.n_states) ## this is hard coded for DeiT currently, but could be changed for other models
         else:
@@ -571,22 +570,11 @@ class ASTModel_finetune(nn.Module):
             x = torch.stack(hidden_states[:-1]) #stack all hidden states (EXCLUDING THE LAST ITEM which is just the output of the last transformer block after being run through a normalization layer. 2nd to last ind is same output prior to norm layer)
             x = x[:, :, :self.cls_token_num,:]
             x = torch.mean(x, dim=2) #hidden layers x batch size x embedding dim
-            
-            # if self.cls_token_num == 2:
-            #     x = (x[:,:, 0,:] + x[:,:, 1,:]) / 2 #if 2 cls tokens, get the mean
-            # else:
-            #     x = x[:,:, 0,:] #otherwise take the 1 token
-
             outputs = self._mat_mul_weights(x) #run matrix multiplication
         else:  
             x = hidden_states[layer] #select which output you are using as x
             x = x[:,:self.cls_token_num,:]
             outputs = torch.mean(x,dim=1)
-            # if self.cls_token_num == 2:
-
-            #     x = (x[:, 0,:] + x[:, 1,:]) / 2 #if 2 cls tokens, get the mean
-            # else:
-            #     x = x[:, 0,:] #otherwise take the 1 token
         
         return outputs
 
