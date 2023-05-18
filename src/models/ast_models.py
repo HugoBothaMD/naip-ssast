@@ -626,58 +626,36 @@ class ASTModel_finetune(nn.Module):
         
         ## EMBEDDING 'pt': extract from a hidden state
         elif embedding_type == 'pt' or embedding_type == 'wt':
-            #original values
-            l = self.layer
-            mf = self._merge_fn
-            w = self.weighted
+            x = x.unsqueeze(1) #(batch_size, 1, time_fram_num, frequency_bins), e.g. (12, 1, 1024, 128)
+            x = x.transpose(2, 3) #(batch_size, 1, frequency_bines, time_frame_num) e.g. (12, 1, 128, 1024)
+
+            hidden_states = self._base_model(x)
 
             #reset values
             if embedding_type == 'pt': # if 'pt', self.weighted must always be false
-                self.weighted=False
+                weighted=False
             else: #else the model must have been trained for weighted sum, so original self.weighted must be True
                 try:
-                    assert self.weighted
+                    weighted=self.weighted
+                    assert weighted
                 except:
                     raise ValueError('The model must be trained for weightsum')
 
-            if layer is not None and layer != self.layer: #if the layer value is specified, need to reset
-                self.layer = layer
+            if layer is None:
+                layer = self.layer
 
-            if task is not None and task != self.task: #if task is specified, need to reset
-                if task == 'ft_cls':
-                    self._merge_fn = self._cls
-                elif task == 'ft_avgtok':
-                    self._merge_fn = self._avgtok
-                else:
-                    raise ValueError('Selected task not valid')
+            if task is None: 
+                e = self._merge_fn(hidden_states, weighted, layer)
+            elif task == 'ft_cls':
+                e = self._cls(hidden_states, weighted, layer)
+            elif task == 'ft_avgtok':
+                e = self._avgtok(hidden_states, weighted, layer)
+            else:
+                raise ValueError('Selected task not valid')
 
-            e = self.forward(x)
-
-            #set values back to normal:
-            self.weighted=w
-            if layer is not None and layer != self.layer:
-                self.layer = l
-            if task is not None and task != self.task:
-                self._merge_fn = mf
+           
+            return e
             
-            
-        # elif embedding_type == 'wt':
-        #     x = x.unsqueeze(1)
-        #     x = x.transpose(2, 3)
-        #     x = self._base_model(x)
-
-        #     try:
-        #         assert self.weighted
-        #     except:
-        #         raise ValueError('The model must be trained for weightsum')
-        #     if task is None:
-        #         e = self._merge_fn(x, self.weighted, layer)
-        #     elif task == 'ft_cls':
-        #         e = self._cls(x, self.weighted, layer)
-        #     elif task == 'ft_avgtok':
-        #         e = self._avgtok(x, self.weighted, layer)
-        #     else:
-        #         raise ValueError('Selected task not valid')
 
         else:
             raise ValueError('Embedding type must be finetune (ft), pretrain (pt), or weighted sum (wt)')
