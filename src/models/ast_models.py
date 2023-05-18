@@ -8,7 +8,7 @@
 # the unified ast models for all pretraining/fine-tuning tasks.
 '''
 AST Model classes
-All the functionality/code is the same as the original SSAST, but has been split into two classes to remove branching logic in fine-tuning.
+All the functionality/code is the same as the original SSAST, but has been split into two classes to remove branching logic for fine-tuning.
 
 Now ASTModel_pretrain and ASTModel_finetune
 
@@ -210,7 +210,7 @@ class ASTModel_pretrain(nn.Module):
     
      # masked patch pretraining with discriminative objective
     def mpc(self, x, mask_patch, cluster, show_mask=False):
-        input = self.unfold(x).transpose(1, 2)
+        input = self.unfold(x).transpose(1, 2) # (batch size, 512, 256)
         B = x.shape[0]
         # x in shape (batch_size, sequence_len, embedding dim)
         x = self.v.patch_embed(x)
@@ -353,8 +353,8 @@ class ASTModel_pretrain(nn.Module):
     
     def forward(self, x, task, cluster=True, mask_patch=100):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        x = x.unsqueeze(1)
-        x = x.transpose(2, 3)
+        x = x.unsqueeze(1) #(batch_size, 1, time_frame_num, frequency_bins)
+        x = x.transpose(2, 3) #(batch_size, 1, frequency_bins, time_frame_num)
 
       # pretraining, masked patch classification (discriminative objective)
         if task == 'pretrain_mpc':
@@ -372,31 +372,34 @@ class ASTModel_finetune(nn.Module):
     Edited finetuning class
     Parameters:
     :param task: finetuning task
+    :param label_dim: default
+    :param fshape: default
+    :param tshape: default
+    :param fstride: default
+    :param tstride: default
+    :param input_fdim: # of frequency bins
+    :param input_tdim: # of time frames
     :param model_size: model size to initialize - will run into errors if pretrained model path is a mismatch with this
     :param load_pretrained_mdl_path: path to a pretrained model checkpoint
     :param activation: activation function for classification head
     :param final_dropout: amount of dropout to use in classification head
     :param layernorm: include layer normalization in classification head
     :param freeze: specify whether to freeze the pretrained model parameters
+    :param weighted: specify which mode to run as the forward function (False: forward for a single hidden layer, True: weighted layer sum)
+    :param layer: layer for single hidden layer extraction, default is -1 (which extracts the final hidden layer)
     '''
     def __init__(self, task='ft_cls',label_dim=527,
                  fshape=128, tshape=2, fstride=128, tstride=2,
                  input_fdim=128, input_tdim=1024, model_size='base',load_pretrained_mdl_path=None,
-                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True, pooling_mode='mean',
-                 hidden_method='final'):
+                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True,
+                 weighted=False, layer=-1):
 
+        ######### ORIGINAL CODE  ######### 
         super(ASTModel_finetune, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
 
         # override timm input shape restriction
         timm.models.vision_transformer.PatchEmbed = PatchEmbed
-
-        if task == 'ft_cls':
-            self.finetuningtask = self.finetuningcls
-        elif task == 'ft_avgtok':
-            self.finetuningtask = self.finetuningavgtok
-        else:
-            raise ValueError('Please set finetuning task as either cls or avg')
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if load_pretrained_mdl_path == None:
@@ -465,31 +468,42 @@ class ASTModel_finetune(nn.Module):
         new_pos_embed = new_pos_embed.reshape(1, self.original_embedding_dim, num_patches).transpose(1, 2)
         self.v.pos_embed = nn.Parameter(torch.cat([self.v.pos_embed[:, :self.cls_token_num, :].detach(), new_pos_embed], dim=1))
 
-        ############ ADDITIONS ######
-        self.v_list = [k[0] for k in self.v.named_parameters()] #list of layer_names in base model
+        ############ ADDITIONS ############
 
-        self.hidden_method=hidden_method
+        self.weighted = weighted #specification for running weight sum finetuning, where we generate a weight for each layer to contribute to the classification
 
-        if self.hidden_method=="weighted":
-            self.weightsum=nn.Parameter(torch.ones(13)/13) ## this is hard coded for DeiT currently, but could be changed for other models
+        self.n_states = audio_model.heads + 1
+        if self.weighted:
+            self.weightsum=nn.Parameter(torch.ones(self.n_states)/self.n_states) ## this is hard coded for DeiT currently, but could be changed for other models
         else:
-            self.weightsum=torch.ones(13)/13
+            self.weightsum=torch.ones(self.n_states)/self.n_states #non-parameter version
+
+        #specify which hidden layer is being used for input to classification. 
+        assert layer >= -1 and layer <= self.n_states, f'invalid layer given: {layer}. Layer must either be -1 for final layer, or a number between 0 and {self.n_states}'
+        self.layer = layer
         
         # mlp head for fine-tuning
-        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm)
+        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm) #set up classification head - input dim is original embedding dim
         self.mlp_list = [f'head.{k}' for k in self.mlp_head.key] #list of layer names in classification head
-
+        
+        # if you don't want to finetune the entire model, but only the classification head, all parameters in the base model (self.v) are frozen
         if freeze:
             for param in self.v.parameters():
                 param.requires_grad = False
 
-        #for embedding extraction
-        self.pooling_mode = pooling_mode
+        #set up merging function based on finetuning task
+        self.task = task
+        if self.task == 'ft_cls':
+            self._merge_fn = self._cls
+        elif self.task == 'ft_avgtok':
+            self._merge_fn = self._avgtok
+        else:
+            raise ValueError(f'Task is set as {task}, but this is an invalid task. Please set finetuning task as either ft_cls or ft_avgtok')
 
-        
-
-    # get the shape of intermediate representation.
     def get_shape(self, fstride, tstride, input_fdim, input_tdim, fshape, tshape):
+        """
+        Original fn to get shape of intermediate representation
+        """
         test_input = torch.randn(1, 1, input_fdim, input_tdim)
         test_proj = nn.Conv2d(1, self.original_embedding_dim, kernel_size=(fshape, tshape), stride=(fstride, tstride))
         test_out = test_proj(test_input)
@@ -497,131 +511,203 @@ class ASTModel_finetune(nn.Module):
         t_dim = test_out.shape[3]
         return f_dim, t_dim
     
-    def base_model(self, x):
+    def _base_model(self, x):
+        """
+        Split from original finetuning functions. Runs input through the base model.
+
+        Code added to get hidden states (output of each transformer block). 
+        Output changed to list of hidden states, with index 0 being the prepared input that goes into the first transformer block
+        indices [1-12] being the outputs after each block, and 13(-1) being the output of the final block wrapped with a normalization layer.
+        :param x: fbank input (batch size, freq bins, time frames)
+        :return hidden_states: list of hidden ssast states, list is len 14, each item is a tensor of size (batch size, hidden size, embedding dim)
+        """
         B = x.shape[0]
-        x = self.v.patch_embed(x)
+        x = self.v.patch_embed(x) #(batch size x patch_embed out x hidden_dim/embedding_dim) (1, 512, 768)
         if self.cls_token_num == 2:
-            cls_tokens = self.v.cls_token.expand(B, -1, -1)
-            dist_token = self.v.dist_token.expand(B, -1, -1)
-            x = torch.cat((cls_tokens, dist_token, x), dim=1)
+            cls_tokens = self.v.cls_token.expand(B, -1, -1) # batch_size, 1, embedding dim
+            dist_token = self.v.dist_token.expand(B, -1, -1) #batch_size, 1, embedding dim
+            x = torch.cat((cls_tokens, dist_token, x), dim=1) #add both at top (batch size x patch_embed out + 2 x embedding dim) (1, 514, 768), 
         else:
             cls_tokens = self.v.cls_token.expand(B, -1, -1)
-            x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.v.pos_embed
-        x = self.v.pos_drop(x)
+            x = torch.cat((cls_tokens, x), dim=1) #add at top, (1, 513, 768)
+        x = x + self.v.pos_embed #no shape change
+        x = self.v.pos_drop(x) #no shape change
 
         hidden_states=[]
-        hidden_states.append(x)
+        hidden_states.append(x) 
 
         for blk_id, blk in enumerate(self.v.blocks):
             x = blk(x)
-            hidden_states.append(x)
+            hidden_states.append(x) #get each hidden state
         x = self.v.norm(x)
+        hidden_states.append(x) #NOTE that the final two hidden states are the same block output, with one being directly from the model and one being the normalized
 
-        return x, hidden_states
-
-    def finetuningavgtok(self, x,hidden_states, weightsum):
-        # average output of all tokens except cls token(s)
-        if self.hidden_method=="final":
-            x = torch.mean(x[:, self.cls_token_num:, :], dim=1)
-            x = self.mlp_head(x)
-        elif self.hidden_method=="weighted":
-            hidden_stack=torch.stack(hidden_states)
-            hidden_stack=hidden_stack[:, :,self.cls_token_num:, :]
-            hidden_stack=hidden_stack.mean(dim=2)
-            hidden_stack=torch.permute(hidden_stack, (1,0,2)) # batch x layer x token
-            w_sum=torch.reshape(weightsum, (1,1,13))
-            w_sum=w_sum.repeat(hidden_stack.shape[0],1,1)
-            weighted_sum=torch.bmm(w_sum, hidden_stack)
-            weighted_sum=weighted_sum.view(hidden_stack.shape[0],768) # should probably not hardcode 768 but instead use hidden size
-            x = self.mlp_head(weighted_sum)
-        else: 
-            raise Exception(
-                "Hidden method must be one of ['final', 'weighted']")
-        return x
-
-    def finetuningcls(self, x,hidden_states, weightsum):
-        # if models has two cls tokens (DEIT), average as the clip-level representation
-        if self.hidden_method=="final":
-            # if models has two cls tokens (DEIT), average as the clip-level representation
-            if self.cls_token_num == 2:
-                x = (x[:, 0] + x[:, 1]) / 2
-            else:
-                x = x[:, 0]
-            x = self.mlp_head(x)
-        elif self.hidden_method=="weighted":
-            hidden_stack=torch.stack(hidden_states)
-            hidden_stack=hidden_stack[:, :,0:self.cls_token_num:, :]
-            hidden_stack=hidden_stack.mean(dim=2)
-            hidden_stack=torch.permute(hidden_stack, (1,0,2)) # batch x layer x token
-            w_sum=torch.reshape(weightsum, (1,1,13))
-            w_sum=w_sum.repeat(hidden_stack.shape[0],1,1)
-            weighted_sum=torch.bmm(w_sum, hidden_stack)
-            weighted_sum=weighted_sum.view(hidden_stack.shape[0],768) # should probably not hardcode 768 but instead use hidden size
-            x = self.mlp_head(weighted_sum)
-        else: 
-            raise Exception(
-                "Hidden method must be one of ['final', 'weighted']")
-        return x
-
-    def forward(self, x):
-        # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        x = x.unsqueeze(1)
-        x = x.transpose(2, 3)
-
-        x, hidden_states = self.base_model(x)
-        return self.finetuningtask(x,hidden_states, self.weightsum)
+        return hidden_states #14 hidden states, each of size (batch size, patch_embed out + # tokens, embedding_dim) 
     
-    def merged_strategy(
-            self,
-            hidden_states,
-            mode="mean"
-    ):
+    def _mat_mul_weights(self, hidden_states):
         """
-        Set up pooling method to reduce hidden state dimension
-        :param hidden_states: output from last hidden states layer
-        :param mode: pooling method (str, default="mean")
-        :return outputs: hidden_state pooled to reduce dimension
+        Private function that takes in hidden states that have been merged (using _cls or _avgtok), and multiplies it by the weighted sum
+        :param hidden_states: torch tensor of hidden ssast states (# hidden layer, batch size, embedding dim)
+        :return: matrix multiplication of hidden states and weighted sum parameter (batch size, embedding dim)
         """
-        if mode == "mean":
-            outputs = torch.mean(hidden_states, dim=1)
-        elif mode == "sum":
-            outputs = torch.sum(hidden_states, dim=1)
-        elif mode == "max":
-            outputs = torch.max(hidden_states, dim=1)[0]
-        else:
-            raise Exception(
-                "The pooling method hasn't been defined! Your pooling mode must be one of these ['mean', 'sum', 'max']")
+        hidden = torch.permute(hidden_states, (1,0,2)) #permute the shape so it is batch size x # hidden layers x embedding dim
+        w_sum = torch.reshape(self.weightsum,(1,1,self.n_states)) #reshape weight sum to have the right number of dims
+        w_sum=w_sum.repeat(hidden.shape[0],1,1) #repeat for each sample in batch to allow for batch matrix product, results in size #batch size x 1 x 13
+        weighted_sum=torch.bmm(w_sum, hidden) #output: batch size x 1 x embedding dim
 
-        return outputs
-    
-    def extract_embeddings(self, x, embedding_type='ft'):
+        return torch.squeeze(weighted_sum, dim=1) #need to squeeze at output going into classifier should be batch size x embedding dim 
+
+    def _cls(self, hidden_states, weighted, layer):
         """
-        Run model
-        :param input_values: input values to the model (batch_size, input_size)
-        :param embedding_type: 'ft' or 'pt' to indicate whether to extract from classification head or last hidden state
-        :return logits: classifier output (batch_size, num_labels)
+        CLS token mean merging strategy for finetuning.
+        Based on the original function but altered to be compatible with weighted sum (which has an additional dimension)
+        and to extract a specific hidden layer 
+        :param hidden_states: list of hidden ssast states, list is len 14, each item is a tensor of size (batch size, hidden size, embedding dim)
+        :param weighted: boolean specifying whether running weighted sum 
+        :param layer: int indicating which hidden state layer to use.
+        :return outputs: hidden state(s) merged to be of size (batch size, embedding dim)
         """
-        activation = {}
-        def _get_activation(name):
-            def _hook(model, input, output):
-                activation[name] = output.detach()
-            return _hook
-        
-        if embedding_type == 'ft':
-            self.mlp_head.dense.register_forward_hook(_get_activation('embeddings'))
+        if weighted:
+            x = torch.stack(hidden_states[:-1]) #stack all hidden states (EXCLUDING THE LAST ITEM which is just the output of the last transformer block after being run through a normalization layer. 2nd to last ind is same output prior to norm layer)
+            x = x[:, :, :self.cls_token_num,:]
+            x = torch.mean(x, dim=2) #hidden layers x batch size x embedding dim
             
-            logits = self.forward(x)
-            e = activation['embeddings']
+            # if self.cls_token_num == 2:
+            #     x = (x[:,:, 0,:] + x[:,:, 1,:]) / 2 #if 2 cls tokens, get the mean
+            # else:
+            #     x = x[:,:, 0,:] #otherwise take the 1 token
+
+            outputs = self._mat_mul_weights(x) #run matrix multiplication
+        else:  
+            x = hidden_states[layer] #select which output you are using as x
+            x = x[:,:self.cls_token_num,:]
+            outputs = torch.mean(x,dim=1)
+            # if self.cls_token_num == 2:
+
+            #     x = (x[:, 0,:] + x[:, 1,:]) / 2 #if 2 cls tokens, get the mean
+            # else:
+            #     x = x[:, 0,:] #otherwise take the 1 token
         
-        elif embedding_type == 'pt':
-            x = x.unsqueeze(1)
-            x = x.transpose(2, 3)
-            last_state = self.base_model(x)
-            e = self.merged_strategy(last_state, mode=self.pooling_mode)
+        return outputs
+
+    def _avgtok(self, hidden_states, weighted, layer):
+        """
+        Mean merging strategy for finetuning.
+        Based on the original function but altered to be compatible with weighted sum (which has an additional dimension)
+        and to extract a specific hidden layer 
+        :param hidden_states: list of hidden ssast states, list is len 14, each item is a tensor of size (batch size, hidden size, embedding dim)
+        :param weighted: boolean specifying whether running weighted sum 
+        :param layer: int indicating which hidden state layer to use.
+        :return outputs: hidden state(s) merged to be of size (batch size, embedding dim)
+        """
+        if weighted: 
+            x = torch.stack(hidden_states[:-1])  #stack all hidden states (EXCLUDING THE LAST ITEM which is just the output of the last transformer block after being run through a normalization layer. 2nd to last ind is same output prior to norm layer)
+            x = x[:,:,self.cls_token_num:,:]  #select all EXCEPT the cls token
+            x = torch.mean(x, dim=2) #hidden layers x batch size x embedding dim
+            outputs = self._mat_mul_weights(x)
+        else:
+            x = hidden_states[layer] #select which output you are using as x
+            x = x[:,self.cls_token_num:,:] #select all output except the tokens (exclud the first 1 or two of Dim 1)
+            outputs = torch.mean(x, dim=1)
+        
+        return outputs
+
+    def extract_embedding(self, x, embedding_type='ft', layer=None, task=None):
+        """
+        Extract an embedding from various parts of the model
+        :param x: fbank input (batch size, freq bins, time frames)
+        :param embedding_type: 'ft', 'pt', or 'wt', to indicate whether to extract from classification head (ft), hidden state (pt), or weighted sum mat mul (wt)
+        :param layer: int indicating which hidden state layer to use.
+        :param task: finetuning task, only used for 'pt' or 'wt' embedding extraction.
+        :return e: embeddings for a batch (batch_size, embedding dim)
+        """
+        ## EMBEDDING 'ft': extract from finetuned classification head
+        if embedding_type == 'ft':
+            
+            #register a forward hook to grab the output of the first classification layer (called 'dense')
+            activation = {}
+            def _get_activation(name):
+                def _hook(model, input, output):
+                    activation[name] = output.detach()
+                return _hook
+        
+            self.mlp_head.head.dense.register_forward_hook(_get_activation('embeddings')) 
+            
+            logits = self.forward(x)  #run the forward function using model parameters for the task (so that it's inline with the finetuning)
+            e = activation['embeddings'] #get embedding
+        
+        ## EMBEDDING 'pt': extract from a hidden state
+        elif embedding_type == 'pt' or embedding_type == 'wt':
+            #original values
+            l = self.layer
+            mf = self._merge_fn
+            w = self.weighted
+
+            #reset values
+            if embedding_type == 'pt': # if 'pt', self.weighted must always be false
+                self.weighted=False
+            else: #else the model must have been trained for weighted sum, so original self.weighted must be True
+                try:
+                    assert self.weighted
+                except:
+                    raise ValueError('The model must be trained for weightsum')
+
+            if layer is not None and layer != self.layer: #if the layer value is specified, need to reset
+                self.layer = layer
+
+            if task is not None and task != self.task: #if task is specified, need to reset
+                if task == 'ft_cls':
+                    self._merge_fn = self._cls
+                elif task == 'ft_avgtok':
+                    self._merge_fn = self._avgtok
+                else:
+                    raise ValueError('Selected task not valid')
+
+            e = self.forward(x)
+
+            #set values back to normal:
+            self.weighted=w
+            if layer is not None and layer != self.layer:
+                self.layer = l
+            if task is not None and task != self.task:
+                self._merge_fn = mf
+            
+            
+        # elif embedding_type == 'wt':
+        #     x = x.unsqueeze(1)
+        #     x = x.transpose(2, 3)
+        #     x = self._base_model(x)
+
+        #     try:
+        #         assert self.weighted
+        #     except:
+        #         raise ValueError('The model must be trained for weightsum')
+        #     if task is None:
+        #         e = self._merge_fn(x, self.weighted, layer)
+        #     elif task == 'ft_cls':
+        #         e = self._cls(x, self.weighted, layer)
+        #     elif task == 'ft_avgtok':
+        #         e = self._avgtok(x, self.weighted, layer)
+        #     else:
+        #         raise ValueError('Selected task not valid')
 
         else:
-            raise ValueError('Embedding type must be finetune (ft) or pretrain (pt)')
+            raise ValueError('Embedding type must be finetune (ft), pretrain (pt), or weighted sum (wt)')
         
         return e
+    
+    def forward(self, x):
+        """
+        Forward function for the model
+        Reshapes input, runs through base model, merges the hidden states, runs through the classification head
+        """
+        # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
+        x = x.unsqueeze(1) #(batch_size, 1, time_fram_num, frequency_bins), e.g. (12, 1, 1024, 128)
+        x = x.transpose(2, 3) #(batch_size, 1, frequency_bines, time_frame_num) e.g. (12, 1, 128, 1024)
+
+        hidden_states = self._base_model(x)
+        x = self._merge_fn(hidden_states, self.weighted, self.layer)
+        x = self.mlp_head(x)
+        return x
+    
 

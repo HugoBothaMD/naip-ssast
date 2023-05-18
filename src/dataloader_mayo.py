@@ -4,7 +4,7 @@ Audio Dataset functions for SSAST
 Reformated and edited based on code from Yuan Gong (https://github.com/YuanGongND/ssast/tree/main/src/dataloader.py) and David Harwath
 some functions borrowed from https://github.com/SeanNaren/deepspeech.pytorch
 
-Last modified: 04/2023
+Last modified: 05/2023
 Author: Daniela Wiepert
 Email: wiepert.daniela@mayo.edu
 File: dataloader_mayo.py

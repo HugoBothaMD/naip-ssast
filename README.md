@@ -12,9 +12,8 @@ The command line usable, start-to-finish implementation for Mayo speech data is 
 
 ## Known errors
 Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
-1. If you pass any value above 0 for `num_workers`, you will get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
-2. Original implementations not debugged to be compatible with new classification head <- maybe stick the old classification head back in>. Weighted averaging hasn't been debugged.
-3. It does not seem like the learning rate warmup is functioning properly, we will be going in to debug this later.
+1. If you pass any value above 0 for `num_workers` on a local machine, you might get an error when you attempt to load a batch. Due to lack of GPU, it is unclear if this is only an issue on CPU only machines. 
+
 
 ## Running requirements
 The environment must include the following packages, all of which can be dowloaded with pip or conda:
@@ -74,8 +73,7 @@ The following parameters are accepted (`--` indicates the command line argument 
 * `timem`: time mask parameter. Set with `--timem`
 * `noise`: add default noise to spectrogram. Set with `--noise`
 * `skip_norm`: boolean indicating whether to skip normalization of the spectrogram. Set with `--skip_norm`
-*Other?*
-* `mixup`: parameter for file mixup. This is not currently implemented, so regardless of value, it will not run. Set with `--mixup`
+* `mixup`: parameter for file mixup (between 0 and 1). Set with `--mixup`
 
 Outside of the regular audio configurations, you can also set a boolean value for `cdo` (coarse drop out) and `shift` (affine shift) when initializing the `AudioDataset`. These are remnants of the original SSAST dataloading and not required. Both default to False. 
 
@@ -101,10 +99,12 @@ There are many possible arguments to set, including all the parameters associate
 
 ### Run mode
 * `-m, --mode`: Specify the mode you are running, i.e., whether to run fine-tuning for classification ('finetune'), evaluation only ('eval-only'), or embedding extraction ('extraction'). Default is 'finetune'.
+* `--task`: Specify pretraining or fine-tuning task. Choices are 'pretrain_mpc', 'pretrain_mpg', 'pretrain_joint', 'ft_cls', 'ft_avgtok'. 
 * `--pretrained_mdl_path`: specify a pretrained model checkpoint. Default is `SSAST-Base-Fram-400.pth` This is required regardless of whether you include a fine-tuned model path. 
 * `--finetuned_mdl_path`: if running eval-only or extraction, you can specify a fine-tuned model to load in. This can either be a local path of a 'gs://' path, that latter of which will trigger the code to download the specified model path to the local machine. 
 * `--freeze`: boolean to specify whether to freeze the base model
-* `--original_fn`: boolen to specify whether to use original SSAST functions. 
+* `--weighted`: boolean to specify whether to train the weight sum of layers
+* `--layer`: Specify which model layer output to use. Default is -1 which is the final layer. 
 * `--embedding_type`: specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)
 
 ### Audio transforms
@@ -112,9 +112,7 @@ see the audio configurations section for which arguments to set
 
 ### Model parameters 
 You do not need to worry about `--fstride, --tstride, --fshape, --tshape`. The defaults are fine as is.
-* `--task`: string specifying the task to perform. As of now, only compatible with 'ft_cls' and 'ft_avgtok' for fine-tuning. 
 * `--model_size`: specify the size of the AST model to initialize. Needs to be compatible with the pretrained model. Default it `base`
-* `-pm, --pooling_mode`: specify method of pooling the last hidden layer for embedding extraction. Options are 'mean', 'sum', 'max'.
 
 ### Training parameters
 * `--batch_size`: set the batch size (default 8)
@@ -126,7 +124,9 @@ You do not need to worry about `--fstride, --tstride, --fshape, --tshape`. The d
 * `--scheduler`: specify a lr scheduler. If None, no lr scheduler will be use. The only scheduler option is 'onecycle', which initializes `torch.optim.lr_scheduler.OneCycleLR`
 * `--max_lr`: specify the max learning rate for an lr scheduler. Default is 0.01.
 
-### Original fn parameters
+### Pretraining parameters
+* `--mask_patch`: how many patches to mask (used only for ssl pretraining)
+* `--cluster_factor`: mask clutering factor.
 Other parameters for the original function may be altered. We do not list them here. Run `python run.py -h` for more information.
 
 ### Classification Head parameters
@@ -134,14 +134,44 @@ Other parameters for the original function may be altered. We do not list them h
 * `--final_dropout`: specify dropout probability for final dropout layer in classification head
 * `--layernorm`: specify whether to include the LayerNorm in classification head
 
-## New traintest function
-We slightly altered the original train/validation functions for fine-tuning and pre-training. The new versions are available at [traintest_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mayo.py) for fine-tuning and [traintest_mask_mayo.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/traintest_mask_mayo.py) for pre-training. 
+## Functionality
+This implementation contains many functionality options as listed below:
 
-## Embeddings
-Embedding extraction is now a function within `ASTModel_finetun` model (see `extract_embeddings(...)` in [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py)). Notably, this function contains options to extract either the output of the Dense layer from the classification head or the final hidden layer of the base SSAST model by specifying `embedding_type` as either `ft` for 'finetuned' embedding (extracting from classification head) or `pt` for 'pretrained' embedding (extracting from hidden states), on the basis that we generally freeze the model before finetuning. Note that you must indicate a merging strategy for `pt` type embedding extraction to pool the hidden state. This is defaulted to `mean`. It can be set at model initialization or as a parameter in the command line `-pm, --pooling_mode`.
+### 1. Pretraining
+You can pretrain an SSAST model from scratch using the `ASTModel_pretrain` class in [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py)and the `pretrain(...)` function in [loops.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/loops.py). 
 
-## Training
-This function can pretrain the base SSAST if used with `--task` as one of 'pretrain_mpc', 'pretrain_mpg', 'pretrain_joint'.
+This mode is triggered by setting `-m, --mode` to 'train' and also specifying which pretraining task to use with `--task`. The options are 'pretrain_mpc', 'pretrain_mpg', or 'pretrain_joint' which uses both previous tasks.
+
+This implementation currently can not continue pretraining from an already pretrained model checkpoint. 
+
+### 2. Finetuning
+You can finetune SSAST for classifying speech features using the `ASTModel_finetune` class in [ast_models.py]((https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py) and the `finetune(...)` function in [loops.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/loops.py). 
+
+This mode is triggered by setting `-m, --mode` to 'train' and also specifying which finetuning task to use with `--task`. The options are 'ft_cls' or 'ft_avgtok'. See `_cls(x)` and `_avgtok(x)` in `ASTModel_finetune` for more information on how merging is done. 
+
+There are a few different parameters to consider. Firstly, the classification head can be altered to use a different amount of dropout and to include/exclude layernorm. See `ClassificationHead` class in [speech_utils.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/utilities/speech_utils.py) for more information. 
+
+Default run mode will also freeze the base AST model and only finetune the classification head. This can be altered with `--freeze`. 
+
+We also include the option to use a different hidden state output as the input to the classification head. This can be specified with `--layer` and must be an integer between 0 and `model.n_states` (or -1 to get the final layer). This works in the `ASTModel_finetune` class by getting a list of hidden states and indexing using the `layer` parameter. The hidden states output will always have the following trait: the last hidden state is run through a normalization layer such that the second to last index is the last hidden state prior to this normalization and the last index is the final output. That is `[output 1, ..... output12, norm(output12)]`. 
+
+Finally, we added functionality to train an additional parameter to learn weights for the contribution of each hidden state (excluding the final output, i.e. hidden_states[:-1]) to classification. The weights can be accessed with `ASTModel_finetune.weightsum`. This mode is triggered by setting `--weighted` to True. If initializing a model outside of the run function, it is still triggered with an argument called `weighted`. 
+
+### 3. Evaluation only
+If you have a finetuned model and want to evaluate it on a new data set, you can do so by setting `-m, --mode` to 'eval'. You must then also specify a `--finetuned_mdl_path` to load in. 
+
+It is expected that there is an `args.pkl` file in the same directory as the finetuned model to indicate which arguments were used to initialize the finetuned model. This implementation will load the arguments and initialize/load the finetuned model with these arguments. If no such file exists, it will use the arguments from the current run, which could be incompatible if you are not careful. 
+
+
+## 4. Embedding extraction.
+We implemented multiple embedding extraction methods for use with the SSAST model. The implementation is a function within `ASTModel_finetune` called `extract_embedding(x, embedding_type, layer, task)`, which is called on batches instead of the forward function. 
+
+Embedding extraction is triggered by setting `-m, --mode` to 'extraction'. 
+
+You must also consider where you want the embeddings to be extracted from. The options are as follows:
+1. From the output of a hidden state? Set `embedding_type` to 'pt'. Can further set an exact hidden state with the `layer` argument. By default, it will use the layer specified at the time of model initialization. The model default is to give the last hidden state run through a normalization layer - ind 13, so the embedding is this output merged to be of size (batch size, embedding_dim). It will also automatically use the merging strategy defined by the task set at the time of model initialization, but this can be changed at the time of embedding extraction by redefining `task` with either 'ft_cls' or 'ft_avgtok'.
+2. After weighting the hidden states? Set `embedding_type` to 'wt'. This version requires that the model was initially finetuned with  `weighted` set to True.
+3. From a layer in the classification head that has been finetuned? Set `embedding_type` to 'ft'. This version requires no further specification and will always return the output from the first dense layer in the classification head, prior to any activation function or normalization. 
 
 ## Visualize Attention
 Not yet implemented. 
