@@ -86,6 +86,8 @@ There are many possible arguments to set, including all the parameters associate
 * `-d, --data_split_root`: sets the `data_split_root` directory or a full path to a single csv file. For classification, it must be  a directory containing a train.csv and test.csv of file names. If runnning embedding extraction, it should be a csv file. Running evaluation only can accept either a directory or a csv file. This path should include 'gs://' if it is located in a bucket. 
 * `-l, --label_txt`: sets the `label_txt` path. This is a full file path to a .txt file contain a list of the target labels for selection (see [labels.txt](https://github.com/dwiepert/mayo-ssast/blob/main/labels.txt))
 * `--lib`: : specifies whether to load using librosa (True) or torchaudio (False), default=False
+* `--pretrained_mdl_path`: specify a pretrained model checkpoint. Default is `SSAST-Base-Frame-400.pth` This is required regardless of whether you include a fine-tuned model path. 
+* `--finetuned_mdl_path`: if running eval-only or extraction, you can specify a fine-tuned model to load in. This can either be a local path of a 'gs://' path, that latter of which will trigger the code to download the specified model path to the local machine. 
 
 ### Google cloud storage
 * `-b, --bucket_name`: sets the `bucket_name` for GCS loading. Required if loading from cloud.
@@ -100,11 +102,9 @@ There are many possible arguments to set, including all the parameters associate
 ### Run mode
 * `-m, --mode`: Specify the mode you are running, i.e., whether to run fine-tuning for classification ('finetune'), evaluation only ('eval-only'), or embedding extraction ('extraction'). Default is 'finetune'.
 * `--task`: Specify pretraining or fine-tuning task. Choices are 'pretrain_mpc', 'pretrain_mpg', 'pretrain_joint', 'ft_cls', 'ft_avgtok'. 
-* `--pretrained_mdl_path`: specify a pretrained model checkpoint. Default is `SSAST-Base-Fram-400.pth` This is required regardless of whether you include a fine-tuned model path. 
-* `--finetuned_mdl_path`: if running eval-only or extraction, you can specify a fine-tuned model to load in. This can either be a local path of a 'gs://' path, that latter of which will trigger the code to download the specified model path to the local machine. 
 * `--freeze`: boolean to specify whether to freeze the base model
 * `--weighted`: boolean to specify whether to train the weight sum of layers
-* `--layer`: Specify which model layer output to use. Default is -1 which is the final layer. 
+* `--layer`: Specify which model layer (hidden state) output to use. Default is -1 which is the final layer. 
 * `--embedding_type`: specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)
 
 ### Audio transforms
