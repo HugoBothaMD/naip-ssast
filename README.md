@@ -43,6 +43,31 @@ In order to initialize an SSAST, you must have access to a pretrained model chec
 
 2. Use a model checkpoint saved in a GCS bucket. This option can be specified by giving a full file path starting with `gs://BUCKET_NAME/...`. The code will then download this checkpoint locally and reset the checkpoint path to the path it is saved locally. 
 
+## Data structure
+This code will only function with the following data structure.
+
+SPEECH DATA DIR
+
+    |
+
+    -- UID 
+
+        |
+
+        -- waveform.EXT (extension can be any audio file extension)
+
+        -- metadata.json (containing the key 'encoding' (with the extension in capital letters, i.e. mp3 as MP3), also containing the key 'sample_rate_hz' with the full sample rate)
+
+and for the data splits
+
+DATA SPLIT DIR
+
+    |
+
+    -- train.csv
+
+    -- test.csv
+    
 ## Audio Configuration
 Data is loaded using an `AudioDataset` class, where you pass a dataframe of the file names (UIDs) along with columns containing label data, a list of the target labels (columns to select from the df), specify audio configuration, method of loading, and initialize transforms on the raw waveform and spectrogram (see [dataloader.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/dataloader.py)). This implementation diverges greatly from the original dataloading dataset, especially in that the resulting samples will be a dictionary rather than a tuple. As such, when training/evaluating, you will need to access the fbank and labels as follows: batch['fbank'], batch['targets]. 
 
