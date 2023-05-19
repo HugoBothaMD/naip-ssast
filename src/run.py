@@ -345,7 +345,7 @@ def main():
     parser.add_argument("--cluster_factor", type=int, default=3, help="mask clutering factor")
     #classification head parameters
     parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
-    parser.add_argument("--final_dropout", type=float, default=0.25, help="specify dropout probability for final dropout layer in classification head")
+    parser.add_argument("--final_dropout", type=float, default=0.2, help="specify dropout probability for final dropout layer in classification head")
     parser.add_argument("--layernorm", type=bool, default=True, help="specify whether to include the LayerNorm in classification head")
     #OTHER
     parser.add_argument("--debug", default=True, type=bool)
