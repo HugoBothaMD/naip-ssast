@@ -45,7 +45,7 @@ def train_ssast(args):
     """
     #(1) Load data, note that we are not doing any validation
     assert '.csv' not in args.data_split_root, f'May have given a full file path, please confirm this is a directory: {args.data_split_root}'
-    train_df, val_df, test_df = load_data(args.data_split_root, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+    train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
 
     if args.debug:
         train_df = train_df.iloc[0:8,:]
@@ -158,15 +158,16 @@ def eval_only(args):
     """
     assert args.finetuned_mdl_path is not None, 'Evaluation must be run on a finetuned model, otherwise classification head is completely untrained.'
     # get original model args (or if no finetuned model, uses your original args)
-    model_args, args.finetuned_mdl_path = setup_mdl_args(args)
+    model_args, args.finetuned_mdl_path = setup_mdl_args(args, args.finetuned_mdl_path)
 
     #(1) Load data, note that we are not doing any validation
     if '.csv' not in args.data_split_root:
-        train_df, val_df, test_df = load_data(args.data_split_root, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+        train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
     else:
         test_df = pd.read_csv(args.data_split_root, index_col = 'uid')
         if 'distortions' not in test_df.columns:
             test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
+        test_df=test_df.dropna(subset=args.target_labels)
 
     if args.debug:
         test_df = test_df.iloc[0:8,:]
@@ -209,14 +210,17 @@ def get_embeddings(args):
     print('Running Embedding Extraction: ')
 
     # get original model args (or if no finetuned model, uses your original args)
-    model_args, args.finetuned_mdl_path = setup_mdl_args(args)
+    if args.finetuned_mdl_path is None:
+        model_args, args.pretrained_mdl_path = setup_mdl_args(args, args.pretrained_mdl_path)
+    else:
+        model_args, args.finetuned_mdl_path = setup_mdl_args(args, args.finetuned_mdl_path)
 
     # (1) load data to get embeddings for
     assert '.csv' in args.data_split_root, f'A csv file is necessary for embedding extraction. Please make sure this is a full file path: {args.data_split_root}'
     annotations_df = pd.read_csv(args.data_split_root, index_col = 'uid')
     if 'distortions' not in annotations_df.columns:
         annotations_df["distortions"]=((annotations_df["distorted Cs"]+annotations_df["distorted V"])>0).astype(int)
-
+    
     if args.debug:
         annotations_df = annotations_df.iloc[0:8,:]
 
@@ -285,7 +289,7 @@ def main():
     parser.add_argument('-l','--label_txt', default='/Users/m144443/Documents/GitHub/mayo-ssast/src/labels.txt')
     parser.add_argument('--lib', default=False, type=bool, help="Specify whether to load using librosa as compared to torch audio")
     parser.add_argument("--pretrained_mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
-    parser.add_argument("--finetuned_mdl_path", type=str, default='/Users/m144443/Documents/GitHub/mayo-ssast/debug_exp/weighted/amr_subject_dedup_594_train_100_test_binarized_v20220620_base_13_adam_epoch1_ast_ft_mdl.pt', help="if loading an already pre-trained/fine-tuned model")
+    parser.add_argument("--finetuned_mdl_path", type=str, default='', help="if loading an already pre-trained/fine-tuned model")
     #GCS
     parser.add_argument('-b','--bucket_name', default='ml-e107-phi-shared-aif-us-p', help="google cloud storage bucket name")
     parser.add_argument('-p','--project_name', default='ml-mps-aif-afdgpet01-p-6827', help='google cloud platform project name')
@@ -295,7 +299,7 @@ def main():
     parser.add_argument("-o", "--exp_dir", default="./debug_exp/ebed", help='specify LOCAL output directory')
     parser.add_argument('--cloud_dir', default='m144443/temp_out/ssast_orig', type=str, help="if saving to the cloud, you can specify a specific place to save to in the CLOUD bucket")
     #Mode specific
-    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='extraction')
+    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='eval')
     parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
     parser.add_argument("--freeze",type=bool, default=True, help="Specify whether to freeze original model before fine-tuning")
     parser.add_argument("--weighted",type=bool, default=True, help="Specify whether to train the weight sum of layers")
@@ -379,17 +383,12 @@ def main():
     if not os.path.exists(args.exp_dir):
         os.makedirs(args.exp_dir)
     
-    # (6) check if PRETRAINED MDL is stored in gcs bucket
-    if args.pretrained_mdl_path is None:
-        assert args.mode=='train' and 'pretrain' in args.task, 'Must give pretrained model path if not pretraining'
-    else:
-        if args.pretrained_mdl_path[:5] =='gs://':
-            pretrained_mdl_path = args.pretrained_mdl_path[5:].replace(args.bucket_name,'')[1:]
-            pretrained_mdl_path = download_model(pretrained_mdl_path, args.exp_dir, bucket)
-            args.pretrained_mdl_path = pretrained_mdl_path
-        else:
-            assert os.path.exists(args.pretrained_mdl_path), 'Current checkpoint does not exist on local machine'
-
+    # (6) check that clip length has been set
+    if args.clip_length == 0:
+        try: 
+            assert args.batch_size == 1, 'Not currently compatible with different length wav files unless batch size has been set to 1'
+        except:
+            args.batch_size = 1
     
     # (7) dump arguments
     args_path = "%s/args.pkl" % args.exp_dir
@@ -399,12 +398,12 @@ def main():
     if args.cloud:
         upload(args.cloud_dir, args_path, bucket)
 
-    # (8) check that clip length has been set
-    if args.clip_length == 0:
-        try: 
-            assert args.batch_size == 1, 'Not currently compatible with different length wav files unless batch size has been set to 1'
-        except:
-            args.batch_size = 1
+    # (8) check if PRETRAINED MDL is stored in gcs bucket
+    if args.pretrained_mdl_path is None:
+        assert args.mode=='train' and 'pretrain' in args.task, 'Must give pretrained model path if not pretraining'
+    else:
+        args.pretrained_mdl_path = gcs_model_exists(args.pretrained_mdl_path, args.bucket_name, args.exp_dir, bucket)
+    
 
     #(9) add bucket to args
     args.bucket = bucket
