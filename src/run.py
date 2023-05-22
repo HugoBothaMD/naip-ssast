@@ -380,7 +380,7 @@ def main():
     parser.add_argument("--final_dropout", type=float, default=0.3, help="specify dropout probability for final dropout layer in classification head")
     parser.add_argument("--layernorm", type=bool, default=True, help="specify whether to include the LayerNorm in classification head")
     #OTHER
-    parser.add_argument("--debug", default=True, type=bool)
+    parser.add_argument("--debug", default=False, type=bool)
     args = parser.parse_args()
 
     #variables
