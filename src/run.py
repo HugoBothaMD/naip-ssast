@@ -137,7 +137,7 @@ def train_ssast(args):
 
         print('Saving final model')
         if ast_mdl.weighted:
-            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_mdl_weighted.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
         else:
             if args.layer==-1:
                 args.layer='Final'
@@ -148,8 +148,23 @@ def train_ssast(args):
             upload(args.cloud_dir, mdl_path, args.bucket)
 
         #EVALUATE finetuned model
-        preds, targets = evaluation(ast_mdl, eval_loader,
-                                    args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+        preds, targets = evaluation(ast_mdl, eval_loader)
+
+        if ast_mdl.weighted:
+            pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+            target_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+        else:
+            if args.layer==-1:
+                args.layer='Final'
+            pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
+            targets_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
+        
+        torch.save(preds, pred_path)
+        torch.save(targets, target_path)
+
+        if args.cloud:
+            upload(args.cloud_dir, pred_path, args.bucket)
+            upload(args.cloud_dir, target_path, args.bucket)
 
 
 def eval_only(args):
@@ -201,8 +216,18 @@ def eval_only(args):
     ast_mdl.load_state_dict(sd, strict=False)
 
     #(6) evaluate
-    preds, targets = evaluation(ast_mdl, eval_loader, 
-                                args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+    preds, targets = evaluation(ast_mdl, eval_loader)
+
+    print('Saving predictions and targets')
+    pred_path = os.path.join(args.exp_dir, '{}_predictions.pt'.format(args.dataset))
+    target_path = os.path.join(args.exp_dir, '{}_targets.pt'.format(args.dataset))
+    torch.save(preds, pred_path)
+    torch.save(targets, target_path)
+
+    if args.cloud:
+        upload(args.cloud_dir, pred_path, args.bucket)
+        upload(args.cloud_dir, target_path, args.bucket)
+    print('Evaluation finished')
 
 def get_embeddings(args):
     """
@@ -221,6 +246,7 @@ def get_embeddings(args):
     # (1) load data to get embeddings for
     assert '.csv' in args.data_split_root, f'A csv file is necessary for embedding extraction. Please make sure this is a full file path: {args.data_split_root}'
     annotations_df = pd.read_csv(args.data_split_root, index_col = 'uid')
+
     if 'distortions' not in annotations_df.columns:
         annotations_df["distortions"]=((annotations_df["distorted Cs"]+annotations_df["distorted V"])>0).astype(int)
     
@@ -269,14 +295,14 @@ def get_embeddings(args):
         args.layer='Final'
     
     try:
-        pqt_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
+        pqt_path = '{}/{}_embedlayer{}_{}_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
         df_embed.to_parquet(path=pqt_path, index=True, engine='pyarrow') 
 
         if args.cloud:
             upload(args.cloud_dir, pqt_path, args.bucket)
     except:
         print('Unable to save as pqt, saving instead as csv')
-        csv_path = '{}/{}_{}_layer{}_{}_ssast_{}_embeddings.csv'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
+        csv_path = '{}/{}_embedlayer{}_{}_{}_embeddings.csv'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
         df_embed.to_csv(csv_path, index=True)
 
         if args.cloud:
@@ -371,10 +397,13 @@ def main():
     
     # (3) get dataset name
     if args.dataset is None:
-        if '.csv' in args.data_split_root:
-            args.dataset = '{}_{}'.format(os.path.basename(os.path.dirname(args.data_split_root)), os.path.basename(args.data_split_root[:-4]))
+        if args.trained_mdl_path is None or args.mode == 'train':
+            if '.csv' in args.data_split_root:
+                args.dataset = '{}_{}'.format(os.path.basename(os.path.dirname(args.data_split_root)), os.path.basename(args.data_split_root[:-4]))
+            else:
+                args.dataset = os.path.basename(args.data_split_root)
         else:
-            args.dataset = os.path.basename(args.data_split_root)
+            args.dataset = os.path.basename(args.trained_mdl_path)[:-7]
     
    # (4) get target labels
      #get list of target labels

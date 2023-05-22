@@ -346,15 +346,11 @@ def validation(model, criterion, dataloader_val):
 
     return validation_loss
 
-def evaluation(model, dataloader_eval, exp_dir, cloud=False, cloud_dir=None, bucket=None):
+def evaluation(model, dataloader_eval):
     """
     Start model evaluation
     :param model: SSAST model
     :param dataloader_eval: dataloader object with evaluation data
-    :param exp_dir: specify LOCAL output directory as str
-    :param cloud: boolean to specify whether to save everything to google cloud storage
-    :param cloud_dir: if saving to the cloud, you can specify a specific place to save to in the CLOUD bucket
-    :param bucket: google cloud storage bucket object
     :return preds: model predictions
     :return targets: model targets (actual values)
     """
