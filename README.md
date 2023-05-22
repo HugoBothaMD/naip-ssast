@@ -147,6 +147,7 @@ You do not need to worry about `--fstride, --tstride, --fshape, --tshape`. The d
 * `--learning_rate`: you can manually change the learning rate (default 0.0003)
 * `--epochs`: set number of training epochs (default 1)
 * `--optim`: specify the training optimizer. Default is `adam`.
+* `--weight_decay`: specify weight decay for AdamW optimizer
 * `--loss`: specify the loss function. Can be 'BCE' or 'MSE'. Default is 'BCE'.
 * `--scheduler`: specify a lr scheduler. If None, no lr scheduler will be use. The only scheduler option is 'onecycle', which initializes `torch.optim.lr_scheduler.OneCycleLR`
 * `--max_lr`: specify the max learning rate for an lr scheduler. Default is 0.01.

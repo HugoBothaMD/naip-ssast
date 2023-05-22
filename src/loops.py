@@ -22,7 +22,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from utilities import *
 
 def pretrain(model, dataloader_train, dataloader_val = None, 
-             optim='adamw', learning_rate=0.001,
+             optim='adamw', learning_rate=0.001, weight_decay=0.001,
              scheduler='onecycle', max_lr=0.01,
              epochs=10, cluster=False, task='pretrain_joint', mask_patch=400,
              exp_dir='', cloud=False, cloud_dir='', bucket=None):
@@ -34,6 +34,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
     :param dataloader_val: dataloader object with validation data
     :param optim: type of optimizer to initialize
     :param learning_rate: optimizer learning rate
+    :param weight_decay: weight decay value for adamw optimizer
     :param scheduler: type of scheduler to initialize
     :param max_lr: max learning rate for onecycle scheduler
     :param epochs: number of epochs to run pretraining
@@ -55,7 +56,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
     if optim == 'adam':
         optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
     elif optim == 'adamw':
-         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
+         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate, weight_decay=weight_decay)
     else:
         raise ValueError(f'Given optimizer ({optim}) not supported.')
     
@@ -207,8 +208,8 @@ def validation_mask(model, dataloader_val, task, cluster, mask_patch):
     return validation_loss, validation_acc
 
 def finetune(model, dataloader_train, dataloader_val = None, 
-             optim='adamw', learning_rate=0.001, loss_fn='BCE',
-             sched='onecycle', max_lr=0.01,
+             optim='adamw', learning_rate=0.001, weight_decay = 0.001,
+             loss_fn='BCE', sched='onecycle', max_lr=0.01,
              epochs=10, exp_dir='', cloud=False, cloud_dir='', bucket=None):
     """
     Training loop for finetuning SSAST 
@@ -216,6 +217,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
     :param dataloader_train: dataloader object with training data
     :param dataloader_val: dataloader object with validation data
     :param optim: type of optimizer to initialize
+    :param weight_decay: weight decay value for adamw optimizer
     :param learning_rate: optimizer learning rate
     :param loss_fn: type of loss function to initialize
     :param sched: type of scheduler to initialize
@@ -242,7 +244,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
     if optim == 'adam':
         optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],lr=learning_rate)
     elif optim == 'adamw':
-         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate)
+         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate, weight_decay=weight_decay)
     else:
         raise ValueError(f'Given optimizer ({optim}) not supported. Must be either adam or adamw')
     

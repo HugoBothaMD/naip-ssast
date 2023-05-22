@@ -58,9 +58,10 @@ def train_ssast(args):
                     'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
                     'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
     
+    #mixup should be 0 for evaluation, only meant for training
     eval_audio_conf = {'dataset': args.dataset, 'mode': 'evaluation', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
                     'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
-                    'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
+                    'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': 0, 'noise':args.noise,
                     'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
     
     #(3) Generate audio dataset, note that if bucket not given, it assumes None and loads from local files
@@ -96,7 +97,7 @@ def train_ssast(args):
         #run
         print('Now starting self-supervised pretraining for {:d} epochs'.format(args.epochs))
         ast_mdl = pretrain(ast_mdl, train_loader, val_loader, 
-                           args.optim, args.learning_rate,
+                           args.optim, args.learning_rate, args.weight_decay,
                            args.scheduler, args.max_lr,
                            args. epochs,
                            cluster, args.task, args.mask_patch,
@@ -130,8 +131,8 @@ def train_ssast(args):
         #run finetuning
         print('Now starting fine-tuning for {:d} epochs'.format(args.epochs))
         ast_mdl = finetune(ast_mdl, train_loader, val_loader,
-                           args.optim, args.learning_rate, args.loss, 
-                           args.scheduler, args.max_lr, args.epochs,
+                           args.optim, args.learning_rate, args.weight_decay,
+                           args.loss, args.scheduler, args.max_lr, args.epochs,
                            args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
 
         print('Saving final model')
@@ -173,6 +174,7 @@ def eval_only(args):
         test_df = test_df.iloc[0:8,:]
 
     #(2) set audio configurations
+    args.mixup=0 #always 0 for evaluation
     eval_audio_conf = {'dataset': args.dataset, 'mode': 'evaluation', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
                     'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
                     'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
@@ -341,6 +343,7 @@ def main():
     parser.add_argument("--loss", type=str, default="BCE", help="the loss function for finetuning, depend on the task", choices=["BCE", "CE"])
     parser.add_argument("--optim", type=str, default="adam", help="training optimizer", choices=["adamw", "adam"])
     parser.add_argument('-lr', '--learning_rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
+    parser.add_argument("--weight_decay", type=float, default=.0001, help='specify weight decay for adamw')
     parser.add_argument("--scheduler", type=str, default=None, help="specify lr scheduler", choices=["onecycle", None])
     parser.add_argument("--max_lr", type=float, default=0.01, help="specify max lr for lr scheduler")
     #Pretraining parameters
@@ -348,7 +351,7 @@ def main():
     parser.add_argument("--cluster_factor", type=int, default=3, help="mask clutering factor")
     #classification head parameters
     parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
-    parser.add_argument("--final_dropout", type=float, default=0.2, help="specify dropout probability for final dropout layer in classification head")
+    parser.add_argument("--final_dropout", type=float, default=0.3, help="specify dropout probability for final dropout layer in classification head")
     parser.add_argument("--layernorm", type=bool, default=True, help="specify whether to include the LayerNorm in classification head")
     #OTHER
     parser.add_argument("--debug", default=True, type=bool)
