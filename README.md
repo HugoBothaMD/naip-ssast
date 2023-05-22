@@ -132,7 +132,7 @@ There are many possible arguments to set, including all the parameters associate
 * `--freeze`: boolean to specify whether to freeze the base model
 * `--weighted`: boolean to specify whether to train the weight sum of layers
 * `--layer`: Specify which model layer (hidden state) output to use. Default is -1 which is the final layer. 
-* `--embedding_type`: specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)
+* `--embedding_type`: specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt) or weighted model (wt)
 
 ### Audio transforms
 see the audio configurations section for which arguments to set
