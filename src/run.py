@@ -165,7 +165,7 @@ def eval_only(args):
         train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
     else:
         test_df = pd.read_csv(args.data_split_root, index_col = 'uid')
-        if 'distortions' not in test_df.columns:
+        if 'distortions' in args.target_labels and 'distortions' not in test_df.columns:
             test_df["distortions"]=((test_df["distorted Cs"]+test_df["distorted V"])>0).astype(int)
         test_df=test_df.dropna(subset=args.target_labels)
 
@@ -209,6 +209,7 @@ def get_embeddings(args):
     """
     print('Running Embedding Extraction: ')
 
+
     # get original model args (or if no finetuned model, uses your original args)
     if args.finetuned_mdl_path is None:
         model_args, args.pretrained_mdl_path = setup_mdl_args(args, args.pretrained_mdl_path)
@@ -225,13 +226,15 @@ def get_embeddings(args):
         annotations_df = annotations_df.iloc[0:8,:]
 
     #(2) set audio configurations
+    #note, for embedding extraction, mixup should always be 0
+    args.mixup=0
     audio_conf = {'dataset': args.dataset, 'mode': 'evaluation', 'resample_rate': args.resample_rate, 'reduce': args.reduce, 'clip_length': args.clip_length,
                     'tshift':args.tshift, 'speed':args.speed, 'gauss_noise':args.gauss, 'pshift':args.pshift, 'pshiftn':args.pshiftn, 'gain':args.gain, 'stretch': args.stretch,
                     'num_mel_bins': args.num_mel_bins, 'target_length': args.target_length, 'freqm': args.freqm, 'timem': args.timem, 'mixup': args.mixup, 'noise':args.noise,
                     'mean':args.dataset_mean, 'std':args.dataset_std, 'skip_norm':args.skip_norm}
 
     # (3) set up dataloader with current args
-    dataset = AudioDataset(annotations_df=annotations_df, target_labels=model_args.target_labels, audio_conf=audio_conf, 
+    dataset = AudioDataset(annotations_df=annotations_df, target_labels=args.target_labels, audio_conf=audio_conf, 
                                 prefix=args.prefix, bucket=args.bucket, librosa=args.lib)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, collate_fn=collate_fn) 
 
@@ -286,25 +289,25 @@ def main():
     parser.add_argument('-i','--prefix',default='speech_ai/speech_lake/', help='Input directory or location in google cloud storage bucket containing files to load')
     parser.add_argument("-s", "--study", choices = ['r01_prelim','speech_poc_freeze_1', None], default='speech_poc_freeze_1', help="specify study name")
     parser.add_argument("-d", "--data_split_root", default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620/test.csv', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation and embedding expects a single .csv file.")
-    parser.add_argument('-l','--label_txt', default='/Users/m144443/Documents/GitHub/mayo-ssast/src/labels.txt')
+    parser.add_argument('-l','--label_txt', default=None)#'/Users/m144443/Documents/GitHub/mayo-ssast/src/labels.txt')
     parser.add_argument('--lib', default=False, type=bool, help="Specify whether to load using librosa as compared to torch audio")
     parser.add_argument("--pretrained_mdl_path", type=str, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
-    parser.add_argument("--finetuned_mdl_path", type=str, default='', help="if loading an already pre-trained/fine-tuned model")
+    parser.add_argument("--finetuned_mdl_path", type=str, default='/Users/m144443/Documents/GitHub/mayo-ssast/debug_exp/amr_subject_dedup_594_train_100_test_binarized_v20220620_base_13_adam_epoch1_ast_pt_mdl.pt', help="if loading an already pre-trained/fine-tuned model")
     #GCS
     parser.add_argument('-b','--bucket_name', default='ml-e107-phi-shared-aif-us-p', help="google cloud storage bucket name")
     parser.add_argument('-p','--project_name', default='ml-mps-aif-afdgpet01-p-6827', help='google cloud platform project name')
     parser.add_argument('--cloud', default=False, type=bool, help="Specify whether to save everything to cloud")
     #output
     parser.add_argument("--dataset", default=None,type=str, help="When saving, the dataset arg is used to set file names. If you do not specify, it will assume the lowest directory from data_split_root")
-    parser.add_argument("-o", "--exp_dir", default="./debug_exp/ebed", help='specify LOCAL output directory')
+    parser.add_argument("-o", "--exp_dir", default="./debug_exp/embed", help='specify LOCAL output directory')
     parser.add_argument('--cloud_dir', default='m144443/temp_out/ssast_orig', type=str, help="if saving to the cloud, you can specify a specific place to save to in the CLOUD bucket")
     #Mode specific
-    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='eval')
+    parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='extraction')
     parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
     parser.add_argument("--freeze",type=bool, default=True, help="Specify whether to freeze original model before fine-tuning")
     parser.add_argument("--weighted",type=bool, default=True, help="Specify whether to train the weight sum of layers")
     parser.add_argument("--layer",type=int, default=-1, help="Specify which model layer output to use. Default is -1 which is the final layer.")
-    parser.add_argument('--embedding_type', type=str, default='wt', help='specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)', choices=['ft','pt'])
+    parser.add_argument('--embedding_type', type=str, default='ft', help='specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)', choices=['ft','pt'])
     #Audio configuration parameters
     parser.add_argument("--dataset_mean", default=-4.2677393, type=float, help="the dataset mean, used for input normalization")
     parser.add_argument("--dataset_std", default=4.5689974, type=float, help="the dataset std, used for input normalization")
@@ -312,7 +315,7 @@ def main():
     parser.add_argument("--num_mel_bins", default=128,type=int, help="number of input mel bins")
     parser.add_argument("--resample_rate", default=16000,type=int, help='resample rate for audio files')
     parser.add_argument("--reduce", default=True, type=bool, help="Specify whether to reduce to monochannel")
-    parser.add_argument("--clip_length", default=160000, type=int, help="If truncating audio, specify clip length in # of frames. 0 = no truncation")
+    parser.add_argument("--clip_length", default=10.0, type=int, help="If truncating audio, specify clip length in seconds. 0 = no truncation")
     parser.add_argument("--tshift", default=0, type=float, help="Specify p for time shift transformation")
     parser.add_argument("--speed", default=0, type=float, help="Specify p for speed tuning")
     parser.add_argument("--gauss", default=0, type=float, help="Specify p for adding gaussian noise")
@@ -370,14 +373,23 @@ def main():
         else:
             args.dataset = os.path.basename(args.data_split_root)
     
-    # (4) get target labels
+   # (4) get target labels
      #get list of target labels
-    with open(args.label_txt) as f:
-        target_labels = f.readlines()
-    target_labels = [l.strip() for l in target_labels]
-    args.target_labels = target_labels
+    if args.label_txt is None:
+        assert args.mode == 'extraction', 'Must give a txt with target labels for training or evaluating.'
+        args.target_labels = None
+        args.n_class = 0
+    else:
+        with open(args.label_txt) as f:
+            target_labels = f.readlines()
+        target_labels = [l.strip() for l in target_labels]
+        args.target_labels = target_labels
 
-    args.n_class = len(target_labels)
+        args.n_class = len(target_labels)
+
+        if args.n_class == 0:
+            assert args.mode == 'extraction', 'Target labels must be given for training or evaluating. Txt file was empty.'
+
 
     # (5) check if output directory exists, SHOULD NOT BE A GS:// path
     if not os.path.exists(args.exp_dir):

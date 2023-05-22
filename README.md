@@ -85,7 +85,7 @@ The following parameters are accepted (`--` indicates the command line argument 
 *Audio Transform Information*
 * `resample_rate`: an integer value for resampling. Set with `--resample_rate`
 * `reduce`: a boolean indicating whether to reduce audio to monochannel. Set with `--reduce`
-* `clip_length`: integer specifying how many frames the audio should be. Set with `--clip_length`
+* `clip_length`: float specifying how many seconds the audio should be. Will work with the 'sample_rate' of the audio to get # of frames. Set with `--clip_length`
 * `tshift`: Time shifting parameter (between 0 and 1). Set with `--tshift`
 * `speed`: Speed tuning parameter (between 0 and 1). Set with `--speed`
 * `gauss_noise`: amount of gaussian noise to add (between 0 and 1). Set with `--gauss`
@@ -201,6 +201,9 @@ You must also consider where you want the embeddings to be extracted from. The o
 1. From the output of a hidden state? Set `embedding_type` to 'pt'. Can further set an exact hidden state with the `layer` argument. By default, it will use the layer specified at the time of model initialization. The model default is to give the last hidden state run through a normalization layer - ind 13, so the embedding is this output merged to be of size (batch size, embedding_dim). It will also automatically use the merging strategy defined by the task set at the time of model initialization, but this can be changed at the time of embedding extraction by redefining `task` with either 'ft_cls' or 'ft_avgtok'.
 2. After weighting the hidden states? Set `embedding_type` to 'wt'. This version requires that the model was initially finetuned with  `weighted` set to True.
 3. From a layer in the classification head that has been finetuned? Set `embedding_type` to 'ft'. This version requires no further specification and will always return the output from the first dense layer in the classification head, prior to any activation function or normalization. 
+
+Brief note on target labels:
+Embedding extraction is the only mode where target labels are not required. You can give None or an empty list or np.array and it will still function and extract embeddings.
 
 ## Visualize Attention
 Not yet implemented. 

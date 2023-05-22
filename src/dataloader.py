@@ -51,6 +51,9 @@ class AudioDataset(Dataset):
         #set instance variables
         self.annotations_df = annotations_df
         self.target_labels = target_labels
+        if self.target_labels is None:
+            self.target_labels = np.array([])
+            
         self.prefix = prefix
         self.bucket = bucket
         self.lib = librosa #set up using librosa vs. torchaudio for loading
@@ -98,7 +101,11 @@ class AudioDataset(Dataset):
             print('now use noise augmentation')
         self.target_length = self.audio_conf.get('target_length')
 
-        self.label_num = len(self.target_labels)
+        if self.target_labels is not None:
+            self.label_num = len(self.target_labels)
+            print('number of classes is {:d}'.format(self.label_num))
+        else:
+            self.label_num = 0
         print('number of classes is {:d}'.format(self.label_num))
 
         if cdo:
@@ -231,6 +238,7 @@ class AudioDataset(Dataset):
             idx = idx.tolist()
         
         uid = self.annotations_df.index[idx] #get uid to load
+
         targets = self.annotations_df[self.target_labels].iloc[idx].values #get target labels for given uid
         
         sample = {
