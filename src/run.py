@@ -136,7 +136,7 @@ def train_ssast(args):
                            args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
 
         print('Saving final model')
-        if ast_mdl.weighted:
+        if args.weighted:
             mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
         else:
             if args.layer==-1:
@@ -150,7 +150,7 @@ def train_ssast(args):
         #EVALUATE finetuned model
         preds, targets = evaluation(ast_mdl, eval_loader)
 
-        if ast_mdl.weighted:
+        if args.weighted:
             pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
             target_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
         else:
@@ -370,7 +370,7 @@ def main():
     parser.add_argument("--optim", type=str, default="adamw", help="training optimizer", choices=["adamw", "adam"])
     parser.add_argument('-lr', '--learning_rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
     parser.add_argument("--weight_decay", type=float, default=.0001, help='specify weight decay for adamw')
-    parser.add_argument("--scheduler", type=str, default=None, help="specify lr scheduler", choices=["onecycle", None])
+    parser.add_argument("--scheduler", type=str, default="onecycle", help="specify lr scheduler", choices=["onecycle", None])
     parser.add_argument("--max_lr", type=float, default=0.01, help="specify max lr for lr scheduler")
     #Pretraining parameters
     parser.add_argument('--mask_patch', help='how many patches to mask (used only for ssl pretraining)', type=int, default=400)
@@ -397,13 +397,13 @@ def main():
     
     # (3) get dataset name
     if args.dataset is None:
-        if args.trained_mdl_path is None or args.mode == 'train':
+        if args.finetuned_mdl_path is None or args.mode == 'train':
             if '.csv' in args.data_split_root:
                 args.dataset = '{}_{}'.format(os.path.basename(os.path.dirname(args.data_split_root)), os.path.basename(args.data_split_root[:-4]))
             else:
                 args.dataset = os.path.basename(args.data_split_root)
         else:
-            args.dataset = os.path.basename(args.trained_mdl_path)[:-7]
+            args.dataset = os.path.basename(args.finetuned_mdl_path)[:-7]
     
    # (4) get target labels
      #get list of target labels
@@ -412,7 +412,16 @@ def main():
         args.target_labels = None
         args.n_class = 0
     else:
-        with open(args.label_txt) as f:
+        if args.label_txt[:5] =='gs://':
+            label_txt = args.label_txt[5:].replace(args.bucket_name,'')[1:]
+            bn = os.path.basename(label_txt)
+            blob = bucket.blob(label_txt)
+            blob.download_to_filename(bn)
+            label_txt = bn
+        else:
+            label_txt = args.label_txt
+
+        with open(label_txt) as f:
             target_labels = f.readlines()
         target_labels = [l.strip() for l in target_labels]
         args.target_labels = target_labels

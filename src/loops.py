@@ -373,14 +373,6 @@ def evaluation(model, dataloader_eval):
     outputs = torch.cat(outputs).cpu().detach()
     t = torch.cat(t).cpu().detach()
     # SAVE PREDICTIONS AND TARGETS 
-    pred_path = os.path.join(exp_dir, 'ast_eval_predictions.pt')
-    target_path = os.path.join(exp_dir, 'ast_eval_targets.pt')
-    torch.save(outputs, pred_path)
-    torch.save(t, target_path)
-
-    if cloud:
-        upload(cloud_dir, pred_path, bucket)
-        upload(cloud_dir, target_path, bucket)
 
     print('Evaluation finished')
     return outputs, t
