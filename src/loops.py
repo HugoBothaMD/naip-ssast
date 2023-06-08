@@ -104,7 +104,7 @@ def pretrain(model, dataloader_train, dataloader_val = None,
             training_loss.append(loss.detach().cpu().item())
             training_acc.append(acc.detach().cpu().item())
 
-        if e % 10 == 0:
+        if e % 10 == 0 or e == epochs-1:
             #SET UP LOGS
             if scheduler is not None:
                 lr = scheduler.get_last_lr()
@@ -272,7 +272,7 @@ def finetune(model, dataloader_train, dataloader_val = None,
             loss_item = loss.item()
             training_loss.append(loss_item)
 
-        if e % 10 == 0:
+        if e % 10 == 0 or e == epochs-1:
             #SET UP LOGS
             if scheduler is not None:
                 lr = scheduler.get_last_lr()
@@ -318,6 +318,12 @@ def finetune(model, dataloader_train, dataloader_val = None,
                 upload(cloud_dir, logs_path, bucket)
                 upload(cloud_dir, mdl_path, bucket)
                 upload(cloud_dir, optim_path, bucket)
+
+    #save final epoch
+    json_string = json.dumps(logs)
+    logs_path = os.path.join(exp_dir, 'logs_ft_epoch{}.json'.format(e))
+    with open(logs_path, 'w') as outfile:
+        json.dump(json_string, outfile)
 
     print('Finetuning finished')
     return model
