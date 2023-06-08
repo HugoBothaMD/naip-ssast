@@ -158,7 +158,7 @@ def train_ssast(args):
             if args.layer==-1:
                 args.layer='Final'
             pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
-            targets_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
+            target_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
         
         torch.save(preds, pred_path)
         torch.save(targets, target_path)

@@ -27,7 +27,7 @@
             "--weighted=False",
             "--layer=-1",
             "--model_size=base",
-            "--batch_size=32",
+            "--batch_size=8",
             "--num_workers=0",
             "--learning_rate=0.0001",
             "--epochs=20",
