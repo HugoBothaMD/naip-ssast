@@ -20,6 +20,7 @@ File: run.py
 #IMPORTS
 #built-in
 import argparse
+import ast
 import os
 import pickle
 
@@ -318,13 +319,13 @@ def main():
     parser.add_argument("-s", "--study", choices = ['r01_prelim','speech_poc_freeze_1', None], default='speech_poc_freeze_1', help="specify study name")
     parser.add_argument("-d", "--data_split_root", default='gs://ml-e107-phi-shared-aif-us-p/speech_ai/share/data_splits/amr_subject_dedup_594_train_100_test_binarized_v20220620', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation and embedding expects a single .csv file.")
     parser.add_argument('-l','--label_txt', default='src/labels.txt')
-    parser.add_argument('--lib', default=False, type=bool, help="Specify whether to load using librosa as compared to torch audio")
+    parser.add_argument('--lib', default=False, type=ast.literal_eval, help="Specify whether to load using librosa as compared to torch audio")
     parser.add_argument("--pretrained_mdl_path", type=str, default='pretrained_model/SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
     parser.add_argument("--finetuned_mdl_path", type=str, default=None, help="if loading an already pre-trained/fine-tuned model")
     #GCS
     parser.add_argument('-b','--bucket_name', default='ml-e107-phi-shared-aif-us-p', help="google cloud storage bucket name")
     parser.add_argument('-p','--project_name', default='ml-mps-aif-afdgpet01-p-6827', help='google cloud platform project name')
-    parser.add_argument('--cloud', default=False, type=bool, help="Specify whether to save everything to cloud")
+    parser.add_argument('--cloud', default=False, type=ast.literal_eval, help="Specify whether to save everything to cloud")
     #output
     parser.add_argument("--dataset", default=None,type=str, help="When saving, the dataset arg is used to set file names. If you do not specify, it will assume the lowest directory from data_split_root")
     parser.add_argument("-o", "--exp_dir", default="./experiments", help='specify LOCAL output directory')
@@ -332,8 +333,8 @@ def main():
     #Mode specific
     parser.add_argument("-m", "--mode", choices=['train','eval','extraction'], default='train')
     parser.add_argument("--task", type=str, default='ft_cls', help="pretraining or fine-tuning task", choices=["ft_avgtok", "ft_cls", "pretrain_mpc", "pretrain_mpg", "pretrain_joint"])
-    parser.add_argument("--freeze",type=bool, default=True, help="Specify whether to freeze original model before fine-tuning")
-    parser.add_argument("--weighted",type=bool, default=False, help="Specify whether to train the weight sum of layers")
+    parser.add_argument("--freeze",type=ast.literal_eval, default=True, help="Specify whether to freeze original model before fine-tuning")
+    parser.add_argument("--weighted",type=ast.literal_eval, default=False, help="Specify whether to train the weight sum of layers")
     parser.add_argument("--layer",type=int, default=-1, help="Specify which model layer output to use. Default is -1 which is the final layer.")
     parser.add_argument('--embedding_type', type=str, default='ft', help='specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)', choices=['ft','pt'])
     #Audio configuration parameters
@@ -342,7 +343,7 @@ def main():
     parser.add_argument("--target_length", default=1024, type=int, help="the input length in frames")
     parser.add_argument("--num_mel_bins", default=128,type=int, help="number of input mel bins")
     parser.add_argument("--resample_rate", default=16000,type=int, help='resample rate for audio files')
-    parser.add_argument("--reduce", default=True, type=bool, help="Specify whether to reduce to monochannel")
+    parser.add_argument("--reduce", default=True, type=ast.literal_eval, help="Specify whether to reduce to monochannel")
     parser.add_argument("--clip_length", default=10.0, type=int, help="If truncating audio, specify clip length in seconds. 0 = no truncation")
     parser.add_argument("--tshift", default=0, type=float, help="Specify p for time shift transformation")
     parser.add_argument("--speed", default=0, type=float, help="Specify p for speed tuning")
@@ -354,8 +355,8 @@ def main():
     parser.add_argument('--freqm', help='frequency mask max length', type=int, default=0)
     parser.add_argument('--timem', help='time mask max length', type=int, default=0)
     parser.add_argument("--mixup", type=float, default=0, help="how many (0-1) samples need to be mixup during training")
-    parser.add_argument("--noise", type=bool, default=False, help="specify if augment noise in finetuning")
-    parser.add_argument("--skip_norm", type=bool, default=False, help="specify whether to skip normalization on spectrogram")
+    parser.add_argument("--noise", type=ast.literal_eval, default=False, help="specify if augment noise in finetuning")
+    parser.add_argument("--skip_norm", type=ast.literal_eval, default=False, help="specify whether to skip normalization on spectrogram")
     #Model parameters
     parser.add_argument("--fstride", type=int, default=128,help="soft split freq stride, overlap=patch_size-stride")
     parser.add_argument("--tstride", type=int, default=2, help="soft split time stride, overlap=patch_size-stride")
@@ -378,9 +379,9 @@ def main():
     #classification head parameters
     parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
     parser.add_argument("--final_dropout", type=float, default=0.3, help="specify dropout probability for final dropout layer in classification head")
-    parser.add_argument("--layernorm", type=bool, default=True, help="specify whether to include the LayerNorm in classification head")
+    parser.add_argument("--layernorm", type=ast.literal_eval, default=True, help="specify whether to include the LayerNorm in classification head")
     #OTHER
-    parser.add_argument("--debug", default=False, type=bool)
+    parser.add_argument("--debug", default=False, type=ast.literal_eval)
     args = parser.parse_args()
 
     #variables

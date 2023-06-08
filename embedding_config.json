@@ -12,7 +12,7 @@
           "bootDiskSizeGb": 100
         },
         "containerSpec": {
-          "imageUri": "us-central1-docker.pkg.dev/ml-mps-aif-afdgpet01-p-6827/phi-main-us-central1-p/speech_w2v2:m144443-latest",
+          "imageUri": "us-central1-docker.pkg.dev/ml-mps-aif-afdgpet01-p-6827/phi-main-us-central1-p/speech_ssast:m144443-latest",
           "args": [
             "--prefix=speech_ai/speech_lake/",
             "--study=speech_poc_freeze_1",
