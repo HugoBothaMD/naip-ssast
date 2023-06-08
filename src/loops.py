@@ -406,6 +406,7 @@ def embedding_extraction(model, dataloader, embedding_type='ft', layer=-1, task=
             x = batch['fbank']
             x = x.to(device)
             e = model.extract_embedding(x, embedding_type, layer, task)
+            e = e.cpu.numpy()
             if embeddings.size == 0:
                 embeddings = e
             else:

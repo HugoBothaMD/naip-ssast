@@ -21,7 +21,7 @@
             "--lib=False",
             "--pretrained_mdl_path=gs://ml-e107-phi-shared-aif-us-p/m144443/checkpoints/SSAST-Base-Frame-400.pth",
             "--cloud=True",
-            "--cloud_dir=m144443/vertex/mayo-ssast/finetune2",
+            "--cloud_dir=m144443/vertex/mayo-ssast/finetune",
             "--mode=train",
             "--task=ft_cls",
             "--weighted=False",
