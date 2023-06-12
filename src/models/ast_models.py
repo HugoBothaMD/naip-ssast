@@ -28,6 +28,7 @@ import timm
 import torch.nn as nn
 import torch
 
+
 from matplotlib import pyplot as plt
 from timm.models.layers import trunc_normal_, to_2tuple
 
@@ -52,7 +53,6 @@ class PatchEmbed(nn.Module):
     def forward(self, x):
         x = self.proj(x).flatten(2).transpose(1, 2)
         return x
-        return x
 
 def get_sinusoid_encoding(n_position, d_hid):
     ''' Sinusoid position encoding table '''
@@ -74,7 +74,7 @@ class ASTModel_pretrain(nn.Module):
     def __init__(self, fshape=128, tshape=2, fstride=128, tstride=2,
                  input_fdim=128, input_tdim=1024, model_size='base', load_pretrained_mdl_path=None):
         super(ASTModel_pretrain, self).__init__()
-        assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
+        #assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code is NOT compatible with newer versions.'
             # override timm input shape restriction
         timm.models.vision_transformer.PatchEmbed = PatchEmbed
         #TODO: fix
@@ -99,23 +99,31 @@ class ASTModel_pretrain(nn.Module):
         pretrained=False
 
         if model_size == 'tiny':
-            self.v = timm.create_model('vit_deit_tiny_distilled_patch16_224', pretrained=pretrained)
+            self.v = timm.create_model('deit_tiny_distilled_patch16_224', img_size=(input_fdim, input_tdim),pretrained=pretrained)
+            #self.v = timm.create_model('vit_deit_tiny_distilled_patch16_224', pretrained=pretrained)
             self.heads, self.depth = 3, 12
             self.cls_token_num = 2
         elif model_size == 'small':
-            self.v = timm.create_model('vit_deit_small_distilled_patch16_224', pretrained=pretrained)
+            self.v = timm.create_model('deit_small_distilled_patch16_224',img_size=(input_fdim, input_tdim), pretrained=pretrained)
+            #self.v = timm.create_model('vit_deit_small_distilled_patch16_224', pretrained=pretrained)
             self.heads, self.depth = 6, 12
             self.cls_token_num = 2
         elif model_size == 'base':
-            self.v = timm.create_model('vit_deit_base_distilled_patch16_384', pretrained=pretrained)
+            #img = Image.open(urlopen("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png"))
+            #self.v = timm.create_model('deit_base_distilled_patch16_384.fb_in1k', pretrained=pretrained)
+            self.v = timm.create_model('deit_base_distilled_patch16_384', img_size=(input_fdim, input_tdim), pretrained=pretrained)
+            #self.v = timm.create_model('vit_deit_base_distilled_patch16_384', pretrained=pretrained)
             self.heads, self.depth = 12, 12
             self.cls_token_num = 2
         elif model_size == 'base_nokd':
-            self.v = timm.create_model('vit_deit_base_patch16_384', pretrained=pretrained)
+            self.v = timm.create_model('deit_based_patch16_384',img_size=(input_fdim, input_tdim), pretrained=pretrained)
+            #self.v = timm.create_model('vit_deit_base_patch16_384', pretrained=pretrained)
             self.heads, self.depth = 12, 12
             self.cls_token_num = 1
         else:
             raise Exception('Model size must be one of tiny, small, base, base_nokd')
+
+        #timm.models.vision_transformer.PatchEmbed = PatchEmbed
 
         self.original_num_patches = self.v.patch_embed.num_patches
         self.oringal_hw = int(self.original_num_patches ** 0.5)
@@ -395,8 +403,6 @@ class ASTModel_finetune(nn.Module):
 
         ######### ORIGINAL CODE  ######### 
         super(ASTModel_finetune, self).__init__()
-        assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
-
         # override timm input shape restriction
         timm.models.vision_transformer.PatchEmbed = PatchEmbed
 

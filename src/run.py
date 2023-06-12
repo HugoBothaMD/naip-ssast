@@ -463,7 +463,6 @@ def main():
     #(9) add bucket to args
     args.bucket = bucket
     # (10) run model
-    print(args.mode)
 
     if args.mode == 'train':
         train_ssast(args)

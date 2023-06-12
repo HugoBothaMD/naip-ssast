@@ -22,12 +22,10 @@ The environment must include the following packages, all of which can be dowload
 * torch, torchvision, torchaudio
 * tqdm (this is essentially enumerate(dataloader) except it prints out a nice progress bar for you)
 * pyarrow
-* timm == '0.4.5'
+* timm (note that we upgraded and made code compatible with version 0.9.2 - if you run into issues with timm, we recommend downgrading)
 
 If running on your local machine and not in a GCP environment, you will also need to install:
 * google-cloud-storage
-
-The [requirements.txt](https://github.com/dwiepert/mayo-ssast/blob/main/requirements.txt) can be used to set up this environment. 
 
 To access data stored in GCS on your local machine, you will need to additionally run
 
