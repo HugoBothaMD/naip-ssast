@@ -1,0 +1,76 @@
+{
+    "workerPoolSpecs": [
+      {
+        "machineSpec": {
+          "machineType": "n1-highmem-2",
+          "acceleratorType": "NVIDIA_TESLA_T4",
+          "acceleratorCount": 1
+        },
+        "replicaCount": "1",
+        "diskSpec": {
+          "bootDiskType": "pd-ssd",
+          "bootDiskSizeGb": 100
+        },
+        "containerSpec": {
+          "imageUri": "TODO",
+          "args": [
+            "--prefix=TODO",
+            "--study=TODO",
+            "--data_split_root=TODO",
+            "--label_txt=TODO",
+            "--lib=False",
+            "--pretrained_mdl_path=TODO",
+            "--finetuned_mdl_path=TODO",
+            "--bucket_name=TODO",
+            "--project_name=TODO",
+            "--cloud=True",
+            "--cloud_dir=TODO",
+            "--mode=train",
+            "--task=ft_cls",
+            "--freeze=True",
+            "--weighted=False",
+            "--layer=-1",
+            "--embedding_type=ft",
+            "--model_size=base",
+            "--dataset_mean=TODO",
+            "--dataset_std=TODO",
+            "--target_length=1024",
+            "--num_mel_bins=128",
+            "--resample_rate=16000",
+            "--reduce=True",
+            "--clip_length=10.0",
+            "--tshift=0",
+            "--speed=0",
+            "--gauss=0",
+            "--pshift=0",
+            "--pshiftn=0",
+            "--gain=0",
+            "--stretch=0",
+            "--mixup=0",
+            "--freqm=0",
+            "--timem=0",
+            "--noise=False",
+            "--fstride=128",
+            "--tstride=2",
+            "--fshape=128",
+            "--tshape=2",
+            "--batch_size=8",
+            "--num_workers=0",
+            "--learning_rate=0.0001",
+            "--epochs=20",
+            "--optim=adamw",
+            "--weight_decay=0.0001",
+            "--loss=BCE",
+            "--scheduler=onecycle",
+            "--max_lr=0.01",
+            "--mask_patch=400",
+            "--cluster_factor=3",
+            "--activation=relu",
+            "--final_dropout=0.3",
+            "--layernorm=True",
+            "--debug=False"
+          ]
+        }
+      }
+    ]
+  }

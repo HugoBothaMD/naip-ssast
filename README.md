@@ -79,8 +79,6 @@ The audio configuration parameters should be given as a dictionary (which can be
 The following parameters are accepted (`--` indicates the command line argument to alter to set it):
 
 *Dataset Information*
-* `dataset`: a string of the dataset name. Set with `--dataset`
-* `mode`: either 'train' or 'evaluation' (this is handled in the code, the `-m, --mode` argument in the main function is a different setting)
 * `mean`: dataset mean (float). Set with `--dataset_mean`
 * `std`: dataset standard deviation (float) Set with `--dataset_std`
 *Audio Transform Information*
@@ -94,14 +92,13 @@ The following parameters are accepted (`--` indicates the command line argument 
 * `pshiftn`: number of steps for pitch shifting. Set with `--pshiftn`
 * `gain`: gain parameter (between 0 and 1).Set with `--gain`
 * `stretch`: audio stretching parameter (between 0 and 1). Set with `--stretch`
+* `mixup`: parameter for file mixup (between 0 and 1). Set with `--mixup`
 *Spectrogram Transform Information*
 * `num_mel_bins`: number of frequency bins for converting from wav to spectrogram. Set with `--num_mel_bins`
 * `target_length`: target length of resulting spectrogram. Set with `--target_length`
 * `freqm`: frequency mask paramenter. Set with `--freqm`
 * `timem`: time mask parameter. Set with `--timem`
 * `noise`: add default noise to spectrogram. Set with `--noise`
-* `skip_norm`: boolean indicating whether to skip normalization of the spectrogram. Set with `--skip_norm`
-* `mixup`: parameter for file mixup (between 0 and 1). Set with `--mixup`
 
 Outside of the regular audio configurations, you can also set a boolean value for `cdo` (coarse drop out) and `shift` (affine shift) when initializing the `AudioDataset`. These are remnants of the original SSAST dataloading and not required. Both default to False. 
 
@@ -173,6 +170,8 @@ You can pretrain an SSAST model from scratch using the `ASTModel_pretrain` class
 
 This mode is triggered by setting `-m, --mode` to 'train' and also specifying which pretraining task to use with `--task`. The options are 'pretrain_mpc', 'pretrain_mpg', or 'pretrain_joint' which uses both previous tasks.
 
+Additionally, there are data augmentation transforms available for pretraining, such as time shift, speed tuning, adding noise, pitch shift, gain, stretching audio, and audio mixup. 
+
 This implementation currently can not continue pretraining from an already pretrained model checkpoint. 
 
 ### 2. Finetuning
@@ -185,6 +184,8 @@ There are a few different parameters to consider. Firstly, the classification he
 Default run mode will also freeze the base AST model and only finetune the classification head. This can be altered with `--freeze`. 
 
 We also include the option to use a different hidden state output as the input to the classification head. This can be specified with `--layer` and must be an integer between 0 and `model.n_states` (or -1 to get the final layer). This works in the `ASTModel_finetune` class by getting a list of hidden states and indexing using the `layer` parameter. The hidden states output will always have the following trait: the last hidden state is run through a normalization layer such that the second to last index is the last hidden state prior to this normalization and the last index is the final output. That is `[output 1, ..... output12, norm(output12)]`. 
+
+Additionally, there are data augmentation transforms available for finetuning, such as time shift, speed tuning, adding noise, pitch shift, gain, stretching audio, and audio mixup. 
 
 Finally, we added functionality to train an additional parameter to learn weights for the contribution of each hidden state (excluding the final output, i.e. hidden_states[:-1]) to classification. The weights can be accessed with `ASTModel_finetune.weightsum`. This mode is triggered by setting `--weighted` to True. If initializing a model outside of the run function, it is still triggered with an argument called `weighted`. 
 
