@@ -1,4 +1,4 @@
-# SSAST for Mayo Data
+# SSAST for NAIP Data
 This is an implementation of the SSAST: Self-supervised audio spectrogram transformer, which is publicly available at
 [SSAST github](https://github.com/YuanGongND/ssast). The base model architecture is the same, and it is compatible with original pre-trained models that
 can be downloaded from the github to use for finetuning. The major changes are that:
@@ -8,7 +8,7 @@ can be downloaded from the github to use for finetuning. The major changes are t
 4. We added an embedding extraction function to the finetune model class.
 5. We added our training/validation/evaluation loops as well as a loop for embedding extraction. It is no longer compatible with old training/evaluation functions.
 
-The command line usable, start-to-finish implementation for Mayo speech data is available with [run.py](https://github.com/dwiepert/naip-ssast/blob/main/src/run.py). A notebook tutorial version is also available at [run.ipynb](https://github.com/dwiepert/naip-ssast/blob/main/src/run.ipynb). This implementation now has options for pre-training a ssast model, fine-tuning a ssast model, evaluating a saved model, or extracting embeddings.
+The command line usable, start-to-finish implementation for NAIP speech data is available with [run.py](https://github.com/dwiepert/naip-ssast/blob/main/src/run.py). A notebook tutorial version is also available at [run.ipynb](https://github.com/dwiepert/naip-ssast/blob/main/src/run.ipynb). This implementation now has options for pre-training a ssast model, fine-tuning a ssast model, evaluating a saved model, or extracting embeddings.
 
 ## Known errors
 Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
