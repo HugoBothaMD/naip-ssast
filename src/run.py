@@ -46,7 +46,7 @@ def train_ssast(args):
     """
     #(1) Load data, note that we are not doing any validation
     assert '.csv' not in args.data_split_root, f'May have given a full file path, please confirm this is a directory: {args.data_split_root}'
-    train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+    train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket, args.val_size, args.seed)
 
     if args.debug:
         train_df = train_df.iloc[0:8,:]
@@ -178,7 +178,7 @@ def eval_only(args):
 
     #(1) Load data, note that we are not doing any validation
     if '.csv' not in args.data_split_root:
-        train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
+        train_df, val_df, test_df = load_data(args.data_split_root, args.target_labels, args.exp_dir, args.cloud, args.cloud_dir, args.bucket, args.val_size, args.seed)
     else:
         test_df = pd.read_csv(args.data_split_root, index_col = 'uid')
         if 'distortions' in args.target_labels and 'distortions' not in test_df.columns:
@@ -326,6 +326,8 @@ def main():
     parser.add_argument('--lib', default=False, type=ast.literal_eval, help="Specify whether to load using librosa as compared to torch audio")
     parser.add_argument("--pretrained_mdl_path", type=str, default='SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
     parser.add_argument("--finetuned_mdl_path", type=str, default=None, help="if loading an already pre-trained/fine-tuned model")
+    parser.add_argument("--val_size", default=50, type=int, help="Specify size of validation set to generate")
+    parser.add_argument("--seed", default=None, help='Specify a seed for random number generator to make validation set consistent across runs. Accepts None or any valid RandomState input (i.e., int)')
     #GCS
     parser.add_argument('-b','--bucket_name', default=None, help="google cloud storage bucket name")
     parser.add_argument('-p','--project_name', default=None, help='google cloud platform project name')
