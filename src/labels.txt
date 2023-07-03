@@ -1,5 +1,2 @@
-slow rate
-irregular artic breakdowns
-rapid rate
-distortions
-strained
+slow rate,irregular artic breakdowns
+rapid rate,distortions,strained

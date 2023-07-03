@@ -12,7 +12,7 @@ Run embedding extraction
 
 Reformated and edited based on code from Yuan Gong (https://github.com/YuanGongND/ssast/tree/main/src/run.py) 
 
-Last modified: 06/2023
+Last modified: 07/2023
 Author: Daniela Wiepert
 Email: wiepert.daniela@mayo.edu
 File: run.py
@@ -21,6 +21,7 @@ File: run.py
 #built-in
 import argparse
 import ast
+import itertools
 import os
 import pickle
 
@@ -120,8 +121,8 @@ def train_ssast(args):
                                     fstride=args.fstride, tstride=args.tstride,
                                     input_fdim=args.num_mel_bins, input_tdim=args.target_length, 
                                     model_size=args.model_size, load_pretrained_mdl_path=args.pretrained_mdl_path, 
-                                    activation=args.activation, final_dropout=args.final_dropout, layernorm=args.layernorm, freeze=args.freeze, 
-                                    weighted=args.weighted, layer=args.layer)
+                                    freeze = args.freeze, weighted=args.weighted, layer=args.layer, shared_dense=args.shared_dense, sd_bottleneck=args.sd_bottleneck,
+                                    activation=args.activation, final_dropout=args.final_dropout, layernorm=args.layernorm, clf_bottleneck=args.clf_bottleneck)
 
 
         model_parameters = filter(lambda p: p.requires_grad, ast_mdl.parameters())
@@ -136,12 +137,18 @@ def train_ssast(args):
                            args.exp_dir, args.cloud, args.cloud_dir, args.bucket)
 
         print('Saving final model')
+        path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_clf{}'.format(args.dataset,args.model_size, np.sum(args.n_class), args.optim, args.epochs, len(args.n_class)))
         if args.weighted:
-            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
+            path += "_weighted"
         else:
             if args.layer==-1:
                 args.layer='Final'
-            mdl_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_mdl.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
+            path += "_layer{}".format(args.layer)
+
+        if args.shared_dense:
+            path += "_sd"
+        
+        mdl_path = path + '_mdl.pt'
         torch.save(ast_mdl.state_dict(), mdl_path)
 
         if args.cloud:
@@ -150,15 +157,8 @@ def train_ssast(args):
         #EVALUATE finetuned model
         preds, targets = evaluation(ast_mdl, eval_loader)
 
-        if args.weighted:
-            pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
-            target_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_epoch{}_ast_ft_weighted_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.epochs))
-        else:
-            if args.layer==-1:
-                args.layer='Final'
-            pred_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_predictions.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
-            target_path = os.path.join(args.exp_dir, '{}_{}_{}_{}_layer{}_epoch{}_ast_ft_targets.pt'.format(args.dataset,args.model_size, args.n_class, args.optim, args.layer, args.epochs))
-        
+        pred_path = path + '_predictions.pt'
+        target_path = path + "_targets.pt"
         torch.save(preds, pred_path)
         torch.save(targets, target_path)
 
@@ -205,12 +205,12 @@ def eval_only(args):
     
     #(5) initialize and load in finetuned model
     ast_mdl = ASTModel_finetune(task=model_args.task, label_dim=model_args.n_class, 
-                                fshape=model_args.fshape, tshape=model_args.tshape, 
-                                fstride=model_args.fstride, tstride=model_args.tstride,
-                                input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
-                                model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path,
-                                activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, freeze=model_args.freeze,
-                                weighted=model_args.weighted, layer=model_args.layer)
+                                    fshape=model_args.fshape, tshape=model_args.tshape, 
+                                    fstride=model_args.fstride, tstride=model_args.tstride,
+                                    input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
+                                    model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path, 
+                                    freeze = model_args.freeze, weighted=model_args.weighted, layer=model_args.layer, shared_dense=model_args.shared_dense, sd_bottleneck=model_args.sd_bottleneck,
+                                    activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, clf_bottleneck=model_args.clf_bottleneck)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     sd = torch.load(args.finetuned_mdl_path, map_location=device)
@@ -270,12 +270,12 @@ def get_embeddings(args):
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, collate_fn=collate_fn) 
 
     ast_mdl = ASTModel_finetune(task=model_args.task, label_dim=model_args.n_class, 
-                                fshape=model_args.fshape, tshape=model_args.tshape, 
-                                fstride=model_args.fstride, tstride=model_args.tstride,
-                                input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
-                                model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path,
-                                activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, freeze=model_args.freeze,
-                                weighted=model_args.weighted, layer=model_args.layer)
+                                    fshape=model_args.fshape, tshape=model_args.tshape, 
+                                    fstride=model_args.fstride, tstride=model_args.tstride,
+                                    input_fdim=model_args.num_mel_bins, input_tdim=model_args.target_length, 
+                                    model_size=model_args.model_size, load_pretrained_mdl_path=model_args.pretrained_mdl_path, 
+                                    freeze = model_args.freeze, weighted=model_args.weighted, layer=model_args.layer, shared_dense=model_args.shared_dense, sd_bottleneck=model_args.sd_bottleneck,
+                                    activation=model_args.activation, final_dropout=model_args.final_dropout, layernorm=model_args.layernorm, clf_bottleneck=model_args.clf_bottleneck)
     
     if args.finetuned_mdl_path is not None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -285,7 +285,7 @@ def get_embeddings(args):
         print(f'Extracting embeddings from only a pretrained model: {args.pretrained_mdl_path}. Extraction method changed to pt.')
         args.embedding_type = 'pt'
 
-    embeddings = embedding_extraction(ast_mdl, loader, args.embedding_type, args.layer, args.task)
+    embeddings = embedding_extraction(ast_mdl, loader, args.embedding_type, args.layer, args.task, args.pooling_mode)
 
     df_embed = pd.DataFrame([[r] for r in embeddings], columns = ['embedding'], index=annotations_df.index)
     
@@ -297,15 +297,17 @@ def get_embeddings(args):
     elif args.layer==-1:
         args.layer='Final'
     
+    path = '{}/{}_embedlayer{}_{}_{}_embeddings'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
+        
     try:
-        pqt_path = '{}/{}_embedlayer{}_{}_{}_embeddings.pqt'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
+        pqt_path = path + '.pqt'
         df_embed.to_parquet(path=pqt_path, index=True, engine='pyarrow') 
 
         if args.cloud:
             upload(args.cloud_dir, pqt_path, args.bucket)
     except:
         print('Unable to save as pqt, saving instead as csv')
-        csv_path = '{}/{}_embedlayer{}_{}_{}_embeddings.csv'.format(args.exp_dir, args.dataset, args.model_size, args.layer, args.task,args.embedding_type)
+        csv_path = path + '.csv' 
         df_embed.to_csv(csv_path, index=True)
 
         if args.cloud:
@@ -338,7 +340,10 @@ def main():
     parser.add_argument("--freeze",type=ast.literal_eval, default=True, help="Specify whether to freeze original model before fine-tuning")
     parser.add_argument("--weighted",type=ast.literal_eval, default=False, help="Specify whether to train the weight sum of layers")
     parser.add_argument("--layer",type=int, default=-1, help="Specify which model layer output to use. Default is -1 which is the final layer.")
-    parser.add_argument('--embedding_type', type=str, default='ft', help='specify whether embeddings should be extracted from classification head (ft) or base pretrained model (pt)', choices=['ft','pt','wt'])
+    parser.add_argument("--shared_dense", type=ast.literal_eval, default=False, help="specify whether to add an additional shared dense layer before the classifier(s)")
+    parser.add_argument("--sd_bottleneck", type=int, default=768, help="specify whether to decrease when using shared_dense layer")
+    parser.add_argument('--embedding_type', type=str, default='ft', help='specify whether embeddings should be extracted from classification head (ft), base pretrained model (pt), weighted sum (wt),or shared dense layer (st)', choices=['ft','pt','wt', 'st'])
+    parser.add_argument('--pooling_mode', default='mean', choices=['mean','sum'],help='specify how to pool embeddings (mean, sum)')
     #Audio configuration parameters
     parser.add_argument("--dataset_mean", default=0, type=float, help="the dataset mean, used for input normalization")
     parser.add_argument("--dataset_std", default=0, type=float, help="the dataset std, used for input normalization")
@@ -381,6 +386,7 @@ def main():
     parser.add_argument("--activation", type=str, default='relu', help="specify activation function to use for classification head")
     parser.add_argument("--final_dropout", type=float, default=0.3, help="specify dropout probability for final dropout layer in classification head")
     parser.add_argument("--layernorm", type=ast.literal_eval, default=True, help="specify whether to include the LayerNorm in classification head")
+    parser.add_argument("--clf_bottleneck", type=int, default=768, help="specify whether to apply a bottleneck to initial classifier dense layer")
     #OTHER
     parser.add_argument("--debug", default=False, type=ast.literal_eval)
     args = parser.parse_args()
@@ -412,7 +418,8 @@ def main():
     if args.label_txt is None:
         assert args.mode == 'extraction', 'Must give a txt with target labels for training or evaluating.'
         args.target_labels = None
-        args.n_class = 0
+        args.label_groups = None
+        args.n_class = []
     else:
         if args.label_txt[:5] =='gs://':
             label_txt = args.label_txt[5:].replace(args.bucket_name,'')[1:]
@@ -425,12 +432,12 @@ def main():
 
         with open(label_txt) as f:
             target_labels = f.readlines()
-        target_labels = [l.strip() for l in target_labels]
-        args.target_labels = target_labels
+        target_labels = [l.strip().split(sep=",") for l in target_labels]
+        args.label_groups = target_labels 
+        args.target_labels = list(itertools.chain.from_iterable(target_labels))
+        args.n_class = [len(l) for l in args.label_groups]
 
-        args.n_class = len(target_labels)
-
-        if args.n_class == 0:
+        if args.n_class == []:
             assert args.mode == 'extraction', 'Target labels must be given for training or evaluating. Txt file was empty.'
 
 
@@ -446,12 +453,17 @@ def main():
             args.batch_size = 1
     
     # (7) dump arguments
-    args_path = "%s/args.pkl" % args.exp_dir
-    with open(args_path, "wb") as f:
-        pickle.dump(args, f)
-    #in case of error, everything is immediately uploaded to the bucket
-    if args.cloud:
-        upload(args.cloud_dir, args_path, bucket)
+    if args.mode=='train':
+        #only save args if training a model. 
+        args_path = "%s/args.pkl" % args.exp_dir
+        assert not os.path.exists(args_path), 'Current experiment directory already has an args.pkl file. Please change experiment directory or rename the args.pkl to avoid overwriting the file.'
+
+        with open(args_path, "wb") as f:
+            pickle.dump(args, f)
+
+        #in case of error, everything is immediately uploaded to the bucket
+        if args.cloud:
+            upload(args.cloud_dir, args_path, bucket)
 
     # (8) check if PRETRAINED MDL is stored in gcs bucket
     if args.pretrained_mdl_path is None:
@@ -459,7 +471,6 @@ def main():
     else:
         args.pretrained_mdl_path = gcs_model_exists(args.pretrained_mdl_path, args.bucket_name, args.exp_dir, bucket)
     
-
     #(9) add bucket to args
     args.bucket = bucket
     # (10) run model

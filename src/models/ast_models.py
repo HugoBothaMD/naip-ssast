@@ -12,7 +12,7 @@ All the functionality/code is the same as the original SSAST, but has been split
 
 Now ASTModel_pretrain and ASTModel_finetune
 
-Last modified: 05/2023
+Last modified: 07/2023
 Author: Daniela Wiepert
 Email: wiepert.daniela@mayo.edu
 File: ast_models.py
@@ -388,18 +388,21 @@ class ASTModel_finetune(nn.Module):
     :param input_tdim: # of time frames
     :param model_size: model size to initialize - will run into errors if pretrained model path is a mismatch with this
     :param load_pretrained_mdl_path: path to a pretrained model checkpoint
-    :param activation: activation function for classification head
-    :param final_dropout: amount of dropout to use in classification head
-    :param layernorm: include layer normalization in classification head
     :param freeze: specify whether to freeze the pretrained model parameters
     :param weighted: specify which mode to run as the forward function (False: forward for a single hidden layer, True: weighted layer sum)
     :param layer: layer for single hidden layer extraction, default is -1 (which extracts the final hidden layer)
+    :param shared_dense: specify whether to add a shared dense layer before classification head
+    :param sd_bottleneck: size to reduce to in shared dense layer
+    :param activation: activation function for classification head
+    :param final_dropout: amount of dropout to use in classification head
+    :param layernorm: include layer normalization in classification head
+    :param clf_bottleneck: size to reduce to in intial classifier dense layer
     '''
     def __init__(self, task='ft_cls',label_dim=527,
                  fshape=128, tshape=2, fstride=128, tstride=2,
                  input_fdim=128, input_tdim=1024, model_size='base',load_pretrained_mdl_path=None,
-                 activation='relu', final_dropout=0.2, layernorm=True, freeze=True,
-                 weighted=False, layer=-1):
+                 freeze=True, weighted=False, layer=-1, shared_dense=False, sd_bottleneck=768,
+                 activation='relu', final_dropout=0.2, layernorm=True, clf_bottleneck=768):
 
         ######### ORIGINAL CODE  ######### 
         super(ASTModel_finetune, self).__init__()
@@ -474,6 +477,15 @@ class ASTModel_finetune(nn.Module):
         self.v.pos_embed = nn.Parameter(torch.cat([self.v.pos_embed[:, :self.cls_token_num, :].detach(), new_pos_embed], dim=1))
 
         ############ ADDITIONS ############
+        self.sd_bottleneck=sd_bottleneck
+        self.clf_bottleneck=clf_bottleneck
+
+        self.shared_dense = shared_dense
+        if self.shared_dense:
+            self.dense = nn.Linear(self.original_embedding_dim, self.sd_bottleneck)
+            self.clf_input = self.sd_bottleneck
+        else:
+            self.clf_input = self.original_embedding_dim
 
         self.weighted = weighted #specification for running weight sum finetuning, where we generate a weight for each layer to contribute to the classification
 
@@ -488,8 +500,18 @@ class ASTModel_finetune(nn.Module):
         self.layer = layer
         
         # mlp head for fine-tuning
-        self.mlp_head = ClassificationHead(self.original_embedding_dim, label_dim, activation, final_dropout, layernorm) #set up classification head - input dim is original embedding dim
-        self.mlp_list = [f'head.{k}' for k in self.mlp_head.key] #list of layer names in classification head
+        self.mlp_heads = []
+        self.label_dim = label_dim
+        if isinstance(self.label_dim, list):
+            for dim in self.label_dim:
+                self.mlp_heads.append(ClassificationHead(input_size=self.clf_input, bottleneck=self.clf_bottleneck, output_size=dim,
+                                             activation=activation, final_dropout=final_dropout,layernorm=layernorm))
+        
+        else:
+            self.mlp_heads.append(ClassificationHead(input_size=self.clf_input, bottleneck=self.clf_bottleneck, output_size=self.label_dim,
+                                             activation=activation, final_dropout=final_dropout,layernorm=layernorm))
+
+        self.mlp_heads = nn.ModuleList(self.mlp_heads)   
         
         # if you don't want to finetune the entire model, but only the classification head, all parameters in the base model (self.v) are frozen
         if freeze:
@@ -606,49 +628,78 @@ class ASTModel_finetune(nn.Module):
         
         return outputs
 
-    def extract_embedding(self, x, embedding_type='ft', layer=None, task=None):
+    def extract_embedding(self, x, embedding_type='ft', layer=None, task=None, pooling_mode="mean"):
         """
         Extract an embedding from various parts of the model
         :param x: fbank input (batch size, freq bins, time frames)
         :param embedding_type: 'ft', 'pt', or 'wt', to indicate whether to extract from classification head (ft), hidden state (pt), or weighted sum mat mul (wt)
         :param layer: int indicating which hidden state layer to use.
         :param task: finetuning task, only used for 'pt' or 'wt' embedding extraction.
+        :param pooling_mode: method of pooling embeddings if required ("mean" or "sum")
         :return e: embeddings for a batch (batch_size, embedding dim)
         """
         ## EMBEDDING 'ft': extract from finetuned classification head
         if embedding_type == 'ft':
-            
+            assert pooling_mode == 'mean' or pooling_mode == 'sum', f"Incompatible pooling given: {pooling_mode}. Please give mean or sum"
+
             #register a forward hook to grab the output of the first classification layer (called 'dense')
             activation = {}
             def _get_activation(name):
                 def _hook(model, input, output):
                     activation[name] = output.detach()
                 return _hook
-        
-            self.mlp_head.head.dense.register_forward_hook(_get_activation('embeddings')) 
             
-            logits = self.forward(x)  #run the forward function using model parameters for the task (so that it's inline with the finetuning)
-            e = activation['embeddings'] #get embedding
-        
-        ## EMBEDDING 'pt': extract from a hidden state, 'wt': extract after matmul with layer weights
-        elif embedding_type == 'pt' or embedding_type == 'wt':
             x = x.unsqueeze(1) #(batch_size, 1, time_fram_num, frequency_bins), e.g. (12, 1, 1024, 128)
             x = x.transpose(2, 3) #(batch_size, 1, frequency_bines, time_frame_num) e.g. (12, 1, 128, 1024)
 
             hidden_states = self._base_model(x)
+            if layer is None:
+                layer = self.layer
 
-            #reset values
-            if embedding_type == 'pt': # if 'pt', self.weighted must always be false
+            x= self._merge_fn(hidden_states, self.weighted, self.layer)
+            
+            if self.shared_dense:
+                x = self.dense(x)
+            
+            embeddings = []
+            for clf in self.mlp_heads:
+                clf.head.dense.register_forward_hook(_get_activation('embeddings')) 
+                logits = clf(x)
+                embeddings.append(activation['embeddings'])
+            
+            embeddings = torch.stack(embeddings, dim=1)
+            if pooling_mode == "mean":
+                e = torch.mean(embeddings, dim=1)
+            else:
+                e = torch.sum(embeddings, dim=1)
+        
+        ## EMBEDDING 'pt': extract from a hidden state, 'wt': extract after matmul with layer weights
+        elif embedding_type in ['pt', 'st', 'wt']:
+            #dealing with weighted sum
+            #if embedding type is st, do we want it to follow whatever the base model did?
+            if embedding_type == 'pt': #if the embedding is extracting from pre-trained model, weighted must be false
                 weighted=False
-            else: #else the model must have been trained for weighted sum, so original self.weighted must be True
+            elif embedding_type == 'wt': #else the model must have been trained for weighted sum, so original self.weighted must be True
                 try:
                     weighted=self.weighted
                     assert weighted
                 except:
                     raise ValueError('The model must be trained for weightsum')
+            else:
+                #if embedding type is st, it will follow whatever you desire
+                weighted=self.weighted
 
-            if layer is None:
-                layer = self.layer
+            #dealing with specific layer extraction
+            #if pretrained extraction, you can extract from any layer, and if none specified, use the one from the model
+            #if weighted sum, embedding extraction should use all the same layer as the model
+            #if shared dense, embedding extraction should use the same layer as the model
+            if embedding_type in ['st','wt'] or layer is None:
+               layer = self.layer
+
+            x = x.unsqueeze(1) #(batch_size, 1, time_frame_num, frequency_bins), e.g. (12, 1, 1024, 128)
+            x = x.transpose(2, 3) #(batch_size, 1, frequency_bines, time_frame_num) e.g. (12, 1, 128, 1024)
+
+            hidden_states = self._base_model(x)
 
             if task is None: 
                 e = self._merge_fn(hidden_states, weighted, layer)
@@ -658,13 +709,13 @@ class ASTModel_finetune(nn.Module):
                 e = self._avgtok(hidden_states, weighted, layer)
             else:
                 raise ValueError('Selected task not valid')
-
-           
-            return e
             
-
+            if embedding_type == 'st':
+                assert self.shared_dense == True, 'The model must be trained with a shared dense' 
+                e = self.dense(e)
+            
         else:
-            raise ValueError('Embedding type must be finetune (ft), pretrain (pt), or weighted sum (wt)')
+            raise ValueError('Embedding type must be finetune (ft), pretrain (pt), shared dense (st), or weighted sum (wt)')
         
         return e
     
@@ -679,7 +730,17 @@ class ASTModel_finetune(nn.Module):
 
         hidden_states = self._base_model(x)
         x = self._merge_fn(hidden_states, self.weighted, self.layer)
-        x = self.mlp_head(x)
-        return x
+        
+        if self.shared_dense:
+            x = self.dense(x)
+
+        preds = []
+        for clf in self.mlp_heads:
+            pred = clf(x)
+            preds.append(pred)
+
+        logits = torch.column_stack(preds)
+
+        return logits
     
 
