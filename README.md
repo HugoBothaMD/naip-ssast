@@ -3,12 +3,12 @@ This is an implementation of the SSAST: Self-supervised audio spectrogram transf
 [SSAST github](https://github.com/YuanGongND/ssast). The base model architecture is the same, and it is compatible with original pre-trained models that
 can be downloaded from the github to use for finetuning. The major changes are that:
 1. The original `ASTModel` class was split into `ASTModel_pretrain` and `ASTModel_finetune`, with no branching logic in the forward loop of the finetune model for use in visualizing attention.
-2. We added a new classification head with a Dense layer, ReLU activation, LayerNorm, dropout, and a final linear projection layer (this class is defined as `ClassificationHead` in [speech_utils.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/utilities/speech_utils.py))
+2. We added a new classification head with a Dense layer, ReLU activation, LayerNorm, dropout, and a final linear projection layer (this class is defined as `ClassificationHead` in [speech_utils.py](https://github.com/dwiepert/naip-ssast/blob/main/src/utilities/speech_utils.py))
 3. We added options for freezing the base SSAST model in the finetune class.
 4. We added an embedding extraction function to the finetune model class.
 5. We added our training/validation/evaluation loops as well as a loop for embedding extraction. It is no longer compatible with old training/evaluation functions.
 
-The command line usable, start-to-finish implementation for Mayo speech data is available with [run.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/run.py). A notebook tutorial version is also available at [run.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run.ipynb). This implementation now has options for pre-training a ssast model, fine-tuning a ssast model, evaluating a saved model, or extracting embeddings.
+The command line usable, start-to-finish implementation for Mayo speech data is available with [run.py](https://github.com/dwiepert/naip-ssast/blob/main/src/run.py). A notebook tutorial version is also available at [run.ipynb](https://github.com/dwiepert/naip-ssast/blob/main/src/run.ipynb). This implementation now has options for pre-training a ssast model, fine-tuning a ssast model, evaluating a saved model, or extracting embeddings.
 
 ## Known errors
 Before installing any packages or attempting to run the code, be aware of the following errors and missing functionality:
@@ -67,11 +67,11 @@ DATA SPLIT DIR
     -- test.csv
     
 ## Audio Configuration
-Data is loaded using an `AudioDataset` class, where you pass a dataframe of the file names (UIDs) along with columns containing label data, a list of the target labels (columns to select from the df), specify audio configuration, method of loading, and initialize transforms on the raw waveform and spectrogram (see [dataloader.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/dataloader.py)). This implementation diverges greatly from the original dataloading dataset, especially in that the resulting samples will be a dictionary rather than a tuple. As such, when training/evaluating, you will need to access the fbank and labels as follows: batch['fbank'], batch['targets]. 
+Data is loaded using an `AudioDataset` class, where you pass a dataframe of the file names (UIDs) along with columns containing label data, a list of the target labels (columns to select from the df), specify audio configuration, method of loading, and initialize transforms on the raw waveform and spectrogram (see [dataloader.py](https://github.com/dwiepert/naip-ssast/blob/main/src/dataloader.py)). This implementation diverges greatly from the original dataloading dataset, especially in that the resulting samples will be a dictionary rather than a tuple. As such, when training/evaluating, you will need to access the fbank and labels as follows: batch['fbank'], batch['targets]. 
 
 To specify audio loading method, you can alter the `bucket` variable and `librosa` variable. As a default, `bucket` is set to None, which will force loading from the local machine. If using GCS, pass a fully initialized bucket. Setting the `librosa` value to 'True' will cause the audio to be loaded using librosa rather than torchaudio. 
 
-The audio configuration parameters should be given as a dictionary (which can be seen in [run.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/runpy) and [run.ipynb](https://github.com/dwiepert/mayo-ssast/blob/main/src/run.ipynb). Most configuration values are for initializing audio and spectrogram transforms. The transform will only be initialized if the value is not 0. If you have a further desire to add transforms, see [speech_utils.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/utilities/speech_utils.py)) and alter [dataloader.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/dataloader.py) accordingly. 
+The audio configuration parameters should be given as a dictionary (which can be seen in [run.py](https://github.com/dwiepert/naip-ssast/blob/main/src/runpy) and [run.ipynb](https://github.com/dwiepert/naip-ssast/blob/main/src/run.ipynb). Most configuration values are for initializing audio and spectrogram transforms. The transform will only be initialized if the value is not 0. If you have a further desire to add transforms, see [speech_utils.py](https://github.com/dwiepert/naip-ssast/blob/main/src/utilities/speech_utils.py)) and alter [dataloader.py](https://github.com/dwiepert/naip-ssast/blob/main/src/dataloader.py) accordingly. 
 
 The following parameters are accepted (`--` indicates the command line argument to alter to set it):
 
@@ -106,7 +106,7 @@ There are many possible arguments to set, including all the parameters associate
 * `-i, --prefix`: sets the `prefix` or input directory. Compatible with both local and GCS bucket directories containing audio files, though do not include 'gs://'
 * `-s, --study`: optionally set the study. You can either include a full path to the study in the `prefix` arg or specify some parent directory in the `prefix` arg containing more than one study and further specify which study to select here.
 * `-d, --data_split_root`: sets the `data_split_root` directory or a full path to a single csv file. For classification, it must be  a directory containing a train.csv and test.csv of file names. If runnning embedding extraction, it should be a csv file. Running evaluation only can accept either a directory or a csv file. This path should include 'gs://' if it is located in a bucket. 
-* `-l, --label_txt`: sets the `label_txt` path. This is a full file path to a .txt file contain a list of the target labels for selection (see [labels.txt](https://github.com/dwiepert/mayo-ssast/blob/main/labels.txt). Features in same classifier group should be split by ',', each feature classifier group should be split by '/n'). If stored in a bucket it If it is empty, it will require that embedding extraction be running.
+* `-l, --label_txt`: sets the `label_txt` path. This is a full file path to a .txt file contain a list of the target labels for selection (see [labels.txt](https://github.com/dwiepert/naip-ssast/blob/main/labels.txt). Features in same classifier group should be split by ',', each feature classifier group should be split by '/n'). If stored in a bucket it If it is empty, it will require that embedding extraction be running.
 * `--lib`: : specifies whether to load using librosa (True) or torchaudio (False), default=False
 * `--pretrained_mdl_path`: specify a pretrained model checkpoint. Default is `SSAST-Base-Frame-400.pth` This is required regardless of whether you include a fine-tuned model path. 
 * `--finetuned_mdl_path`: if running eval-only or extraction, you can specify a fine-tuned model to load in. This can either be a local path of a 'gs://' path, that latter of which will trigger the code to download the specified model path to the local machine. 
@@ -167,7 +167,7 @@ For more information on arguments, you can also run `python run.py -h`.
 This implementation contains many functionality options as listed below:
 
 ### 1. Pretraining
-You can pretrain an SSAST model from scratch using the `ASTModel_pretrain` class in [ast_models.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py)and the `pretrain(...)` function in [loops.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/loops.py). 
+You can pretrain an SSAST model from scratch using the `ASTModel_pretrain` class in [ast_models.py](https://github.com/dwiepert/naip-ssast/blob/main/src/models/ast_models.py)and the `pretrain(...)` function in [loops.py](https://github.com/dwiepert/naip-ssast/blob/main/src/loops.py). 
 
 This mode is triggered by setting `-m, --mode` to 'train' and also specifying which pretraining task to use with `--task`. The options are 'pretrain_mpc', 'pretrain_mpg', or 'pretrain_joint' which uses both previous tasks.
 
@@ -176,11 +176,11 @@ Additionally, there are data augmentation transforms available for pretraining, 
 This implementation currently can not continue pretraining from an already pretrained model checkpoint. 
 
 ### 2. Finetuning
-You can finetune SSAST for classifying speech features using the `ASTModel_finetune` class in [ast_models.py]((https://github.com/dwiepert/mayo-ssast/blob/main/src/models/ast_models.py) and the `finetune(...)` function in [loops.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/loops.py). 
+You can finetune SSAST for classifying speech features using the `ASTModel_finetune` class in [ast_models.py]((https://github.com/dwiepert/naip-ssast/blob/main/src/models/ast_models.py) and the `finetune(...)` function in [loops.py](https://github.com/dwiepert/naip-ssast/blob/main/src/loops.py). 
 
 This mode is triggered by setting `-m, --mode` to 'train' and also specifying which finetuning task to use with `--task`. The options are 'ft_cls' or 'ft_avgtok'. See `_cls(x)` and `_avgtok(x)` in `ASTModel_finetune` for more information on how merging is done. 
 
-There are a few different parameters to consider. Firstly, the classification head can be altered to use a different amount of dropout and to include/exclude layernorm. See `ClassificationHead` class in [speech_utils.py](https://github.com/dwiepert/mayo-ssast/blob/main/src/utilities/speech_utils.py) for more information. 
+There are a few different parameters to consider. Firstly, the classification head can be altered to use a different amount of dropout and to include/exclude layernorm. See `ClassificationHead` class in [speech_utils.py](https://github.com/dwiepert/naip-ssast/blob/main/src/utilities/speech_utils.py) for more information. 
 
 Default run mode will also freeze the base AST model and only finetune the classification head. This can be altered with `--freeze`. 
 
