@@ -458,11 +458,14 @@ def main():
     if args.mode=='train':
         #only save args if training a model. 
         args_path = "%s/args.pkl" % args.exp_dir
-        assert not os.path.exists(args_path), 'Current experiment directory already has an args.pkl file. Please change experiment directory or rename the args.pkl to avoid overwriting the file.'
+        try:
+            assert not os.path.exists(args_path)
+        except:
+            print('Current experiment directory already has an args.pkl file. This file will be overwritten. Please change experiment directory or rename the args.pkl to avoid overwriting the file in the future.')
 
         with open(args_path, "wb") as f:
             pickle.dump(args, f)
-
+        
         #in case of error, everything is immediately uploaded to the bucket
         if args.cloud:
             upload(args.cloud_dir, args_path, bucket)

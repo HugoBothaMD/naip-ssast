@@ -20,6 +20,7 @@ File: ast_models.py
 #IMPORTS
 #built-in
 import random
+from collections import OrderedDict
 from random import randrange
 
 #third party
@@ -482,9 +483,10 @@ class ASTModel_finetune(nn.Module):
 
         self.shared_dense = shared_dense
         if self.shared_dense:
-            self.dense = nn.Linear(self.original_embedding_dim, self.sd_bottleneck)
+            self.dense = nn.Sequential(OrderedDict([('dense',nn.Linear(self.original_embedding_dim, self.sd_bottleneck)), ('relu',nn.ReLU())]))
             self.clf_input = self.sd_bottleneck
         else:
+            self.dense = nn.Identity()
             self.clf_input = self.original_embedding_dim
 
         self.weighted = weighted #specification for running weight sum finetuning, where we generate a weight for each layer to contribute to the classification
@@ -658,8 +660,7 @@ class ASTModel_finetune(nn.Module):
 
             x= self._merge_fn(hidden_states, self.weighted, self.layer)
             
-            if self.shared_dense:
-                x = self.dense(x)
+            x = self.dense(x)
             
             embeddings = []
             for clf in self.mlp_heads:
@@ -731,8 +732,7 @@ class ASTModel_finetune(nn.Module):
         hidden_states = self._base_model(x)
         x = self._merge_fn(hidden_states, self.weighted, self.layer)
         
-        if self.shared_dense:
-            x = self.dense(x)
+        x = self.dense(x)
 
         preds = []
         for clf in self.mlp_heads:
