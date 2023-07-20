@@ -110,8 +110,7 @@ There are many possible arguments to set, including all the parameters associate
 * `--lib`: : specifies whether to load using librosa (True) or torchaudio (False), default=False
 * `--pretrained_mdl_path`: specify a pretrained model checkpoint. Default is `SSAST-Base-Frame-400.pth` This is required regardless of whether you include a fine-tuned model path. 
 * `--finetuned_mdl_path`: if running eval-only or extraction, you can specify a fine-tuned model to load in. This can either be a local path of a 'gs://' path, that latter of which will trigger the code to download the specified model path to the local machine. 
-* `--val_size`: Specify size of validation set to generate
-* `--seed`: Specify a seed for random number generator to make validation set consistent across runs. Accepts None or any valid RandomState input (i.e., int)
+
 
 ### Google cloud storage
 * `-b, --bucket_name`: sets the `bucket_name` for GCS loading. Required if loading from cloud.
@@ -186,7 +185,7 @@ There are a few different parameters to consider. Firstly, the classification he
 
 Default run mode will also freeze the base AST model and only finetune the classification head. This can be altered with `--freeze`. 
 
-We also include the option to use a different hidden state output as the input to the classification head. This can be specified with `--layer` and must be an integer between 0 and `model.n_states` (or -1 to get the final layer). This works in the `ASTModel_finetune` class by getting a list of hidden states and indexing using the `layer` parameter. The hidden states output will always have the following trait: the last hidden state is run through a normalization layer such that the second to last index is the last hidden state prior to this normalization and the last index is the final output. That is `[output 1, ..... output12, norm(output12)]`. Additionally, you can add a shared dense layer prior to the classification head(s) by specifying  `--shared_dense` along with `--sd_bottleneck` to designate the output size for the shared dense layer. 
+We also include the option to use a different hidden state output as the input to the classification head. This can be specified with `--layer` and must be an integer between 0 and `model.n_states` (or -1 to get the final layer). This works in the `ASTModel_finetune` class by getting a list of hidden states and indexing using the `layer` parameter. The hidden states output will always have the following trait: the last hidden state is run through a normalization layer such that the second to last index is the last hidden state prior to this normalization and the last index is the final output. That is `[output 1, ..... output12, norm(output12)]`. Additionally, you can add a shared dense layer prior to the classification head(s) by specifying  `--shared_dense` along with `--sd_bottleneck` to designate the output size for the shared dense layer. Note that the shared dense layer is followed by ReLU activation. Furthermore, if `shared_dense` is False, it will create an Identity layer so as to avoid if statements in the forward loop. 
 
 Classification head(s) can be implemented in the following manner:
 1. Specify `--clf_bottleneck` to designate output for initial linear layer 
