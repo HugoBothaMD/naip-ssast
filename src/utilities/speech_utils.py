@@ -5,8 +5,7 @@ Classification head
 Transforms from SSAST added (https://github.com/YuanGongND/ssast/tree/main/src/run.py)
 
 Author(s): Neurology AI Program (NAIP) at Mayo Clinic
-Last modified: 07/2023
-File: speech_utils.py
+Last modified: 11/2023
 '''
 #IMPORTS
 #built-in
@@ -30,7 +29,7 @@ import torch.nn.functional
 from torch.utils.data import Dataset
 
 from albumentations.core.transforms_interface import DualTransform, BasicTransform
-from google.cloud import storage, bigquery
+from google.cloud import storage
 from torch.utils.data import Dataset
 
 
@@ -94,7 +93,6 @@ class ClassificationHead(nn.Module):
         :return x: classifier output
         """
         return self.head(x)
-
 
 #overrid collate function to stack images differently
 def collate_fn(batch):
@@ -174,6 +172,7 @@ def load_waveform_from_gcs(bucket, gcs_prefix, uid, extension = None, lib=False)
     gcs_metadata_path = f'{gcs_prefix}/{uid}/metadata.json'
     
     metadata_blob = bucket.blob(gcs_metadata_path)
+    
     metadata = json.loads(metadata_blob.download_as_string())
     
     if extension is None:
@@ -208,7 +207,8 @@ def load_waveform_local(input_dir, uid, extension = None, lib=False):
     '''
     
     metadata_path = f'{input_dir}/{uid}/metadata.json'
-    metadata = json.loads(metadata_path)
+    with open(metadata_path) as f:
+        metadata = json.load(f)
     
     if extension is None:
         if metadata['encoding'] == 'MP3':
@@ -301,7 +301,8 @@ class Truncate(object):
         sample['waveform'] = waveform_trunc
         
         return sample
-     
+    
+    
 class ToMonophonic(object):
     '''
     Convert to monochannel with a reduce function (can alter based on how waveform is loaded)
@@ -471,7 +472,7 @@ class WaveMean(object):
         sample['waveform'] = waveform
         
         return sample
-    
+
 class Mixup(object):
     '''
     Implement mixup of two files
@@ -782,7 +783,3 @@ class Wav2Fbank(object):
         if self.override_wave:
             del sample['waveform']
         return sample
-    
-
-
-
