@@ -324,7 +324,7 @@ def main():
     parser.add_argument("-d", "--data_split_root", default='', help="specify file path where datasplit is located. If you give a full file path to classification, an error will be thrown. On the other hand, evaluation and embedding expects a single .csv file.")
     parser.add_argument('-l','--label_txt', default='src/labels.txt')
     parser.add_argument('--lib', default=False, type=ast.literal_eval, help="Specify whether to load using librosa as compared to torch audio")
-    parser.add_argument("--pretrained_mdl_path", type=str, default='SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")#, default='/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth',) #/Users/m144443/Documents/mayo_ssast/pretrained_model/SSAST-Base-Frame-400.pth
+    parser.add_argument("--pretrained_mdl_path", type=str, default='SSAST-Base-Frame-400.pth', help="the ssl pretrained models path")=
     parser.add_argument("--finetuned_mdl_path", type=str, default=None, help="if loading an already pre-trained/fine-tuned model")
     parser.add_argument("--val_size", default=50, type=int, help="Specify size of validation set to generate")
     parser.add_argument("--seed", default=None, help='Specify a seed for random number generator to make validation set consistent across runs. Accepts None or any valid RandomState input (i.e., int)')
